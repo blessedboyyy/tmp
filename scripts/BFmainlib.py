@@ -138,6 +138,16 @@ class BF_image():
         return drawContours(self.bacteria_image_preprocessed.copy(),
                             [contour],
                             contourIdx=-1, color=(0, 255, 0), thickness=1)
+    
+    def object_draw_mask(self, contour = None) -> array:
+        '''
+        Draw the mask of specified contour on an image
+        '''
+        assert contour is not None
+
+        return drawContours(zeros_like(self.bacteria_image_preprocessed),
+                            [contour],
+                            contourIdx=-1, color=(0, 255, 0), thickness=-1).astype(float64)[:,:,1]/255
 
 class BF_object():
     def __init__(self, id : str, type : str, contour_coords : list):
