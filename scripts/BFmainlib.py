@@ -1,9 +1,21 @@
 import os
 
-from numpy import argmax, histogram, zeros, mean, array, uint8, float16
-from cv2 import medianBlur, drawContours, contourArea, findContours, threshold, cvtColor, imread, resize, \
-                INTER_CUBIC, INTER_LANCZOS4, COLOR_RGB2HSV, THRESH_BINARY, THRESH_BINARY_INV, THRESH_TOZERO, THRESH_TOZERO_INV, RETR_LIST, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE
+from numpy import clip, median, zeros_like, argmax, histogram, zeros, mean, std, array, uint8, float64
+from numpy import max as npmax
+from cv2 import medianBlur, drawContours, contourArea, findContours, threshold, cvtColor, imread, resize,\
+                getStructuringElement, morphologyEx, \
+                INTER_CUBIC, INTER_LANCZOS4, COLOR_RGB2HSV, THRESH_BINARY, THRESH_BINARY_INV, THRESH_TOZERO, THRESH_TOZERO_INV,\
+                      RETR_LIST, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE, MORPH_ELLIPSE, MORPH_OPEN, MORPH_ERODE
 from skimage.measure import block_reduce
+from skimage.util import invert
+from skimage.feature import hessian_matrix, hessian_matrix_eigvals
+from skimage.segmentation import watershed
+from scipy.ndimage import label, distance_transform_edt
+
+def detect_ridges(image_gray, sigma=2.0):
+    '''Return eigenvalues of Hessian matrix processed image'''
+    lambda1, lambda2 = hessian_matrix_eigvals(hessian_matrix(image_gray, sigma, use_gaussian_derivatives=True))
+    return lambda1, lambda2
 
 def HSV_transform(image : array) -> array:
     '''
@@ -24,32 +36,69 @@ def HSV_threshold(image : array, type : str = 'simple') -> array:
     This strategy puts to zero every "non-red" and "non-purple" value
     '''
     # TODO: remove hardcode
-    assert type == 'simple' or type == 'bact' or type == 'color'
+    assert type == 'simple_hue' or type == 'bact_hue' or type == 'color_hue' \
+            or type == 'simple_value'
 
-    if type == 'simple':
+    if type == 'simple_hue':
         return threshold(image[:,:,0], 80, 180, THRESH_BINARY)[1]
-    elif type == 'bact':
+    elif type == 'simple_value':
+        ksize = 5
+        value_image_median = median(image[:,:,2])
+        value_image_max = npmax(image[:,:,2])
+
+        return morphologyEx(threshold(image[:,:,2], value_image_median - 20, value_image_max,THRESH_BINARY_INV)[1].copy(),
+                            MORPH_OPEN, getStructuringElement(MORPH_ELLIPSE, (ksize, ksize)))/255
+    elif type == 'bact_hue':
         margin = 5
         image_hue_hist = histogram(image[:,:,0].flatten(), bins=[el for el in range(181)])
         background_max = argmax(image_hue_hist[0])
 
         return threshold(image[:,:,0], background_max + margin, 181, THRESH_BINARY)[1] + threshold(image[:,:,0], background_max - margin, 181, THRESH_BINARY_INV)[1]
-    elif type == 'color':
+    elif type == 'color_hue':
         image_hue_hist = histogram(image[:,:,0].flatten(), bins=[el for el in range(181)])
         margin_min = argmax(image_hue_hist[0])-5
         margin_max = argmax(image_hue_hist[0])+30
 
         return threshold(image[:,:,0], margin_min, 181, THRESH_BINARY_INV)[1] + threshold(image[:,:,0], margin_max, 181, THRESH_BINARY)[1]
     
-def HSV_segmenting(image : array) -> list:
+def HSV_segmenting(image : array, type: str = 'simple') -> list:
     '''
-    Segment an image by thresholding it in HSV colorspace
+    Segment an image by using its HSV colorspace
     '''
     # TODO: add different types of HSV segmenting
-    image_hsv = HSV_transform(image)
-    image_hsv_mask = HSV_threshold(image_hsv, type = 'simple')
-    contours_hsv, hierarchy_hsv = findContours(image_hsv_mask, RETR_LIST, CHAIN_APPROX_SIMPLE)
-    contours_hsv_mask = sorted(contours_hsv, key = contourArea, reverse= True)
+
+    assert type == 'simple' or type == 'ridges'
+
+    if type == 'simple':
+        image_hsv = HSV_transform(image)
+        image_hsv_mask = HSV_threshold(image_hsv, type = 'simple_hue')
+        contours_hsv, hierarchy_hsv = findContours(image_hsv_mask, RETR_LIST, CHAIN_APPROX_SIMPLE)
+        contours_hsv_mask = sorted(contours_hsv, key = contourArea, reverse= True)
+    elif type == 'ridges':
+        image_hsv = HSV_transform(image)
+        image_hue_mask = HSV_threshold(image_hsv, type = 'simple_hue')
+        image_value_mask = HSV_threshold(image_hsv, type = 'simple_value')
+
+        image_ridges = detect_ridges(invert(HSV_transform(image)[:,:,2]), sigma=2.5)[0]
+        image_ridges_mean = mean(image_ridges)
+        image_ridges_std = std(image_ridges)
+        image_ridges_markers = threshold(image_ridges, image_ridges_mean + image_ridges_std/2, 1, THRESH_BINARY_INV)[1]
+
+        image_watershed_mask = clip(image_value_mask + image_hue_mask, None, 1)
+
+        coords = image_watershed_mask*image_ridges_markers
+        markers, _ = label(coords)
+        distance = distance_transform_edt(image_ridges_markers)
+
+        labels = watershed(image = -distance,
+                        markers = markers,
+                        mask = image_watershed_mask,
+                        watershed_line=True)
+        labels_binary = morphologyEx(clip(labels, None, 1).astype(uint8),
+                            MORPH_ERODE, getStructuringElement(MORPH_ELLIPSE, (2, 2)))
+
+        contours_hsv, hierarchy_hsv = findContours(labels_binary, RETR_LIST, CHAIN_APPROX_SIMPLE)
+        contours_hsv_mask = sorted(contours_hsv, key = contourArea, reverse= True)
 
     return contours_hsv_mask
 
@@ -97,20 +146,20 @@ class BF_image():
         '''
         # TODO: add different methods and swithes in the future
         self.bacteria_image_preprocessed = resize(uint8(
-            block_reduce(self.bacteria_image_loaded, (2,2,1), mean, func_kwargs={'dtype': float16})),
+            block_reduce(self.bacteria_image_loaded, (2,2,1), mean, func_kwargs={'dtype': float64})),
             self.bacteria_image_loaded.shape[1::-1], interpolation = INTER_CUBIC)
         
         
         if self.verbose:
             print('Successfully preprocessed an image')
         
-    def segment_image(self):
+    def segment_image(self, type: str = 'simple'):
         '''
         Main pipeline for segmentation
         '''
-        contours_hsv_mask = HSV_segmenting(self.bacteria_image_preprocessed)
+        contours_hsv_mask = HSV_segmenting(self.bacteria_image_preprocessed, type)
         for contour in contours_hsv_mask:
-            if contourArea(contour) > 50:
+            # if contourArea(contour) < 100:
                 self.object_new_add(contour)
 
         if self.verbose:
