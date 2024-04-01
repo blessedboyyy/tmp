@@ -3,7 +3,7 @@ import os
 from numpy import clip, median, zeros_like, argmax, histogram, zeros, mean, std, array, uint8, float64
 from numpy import max as npmax
 from cv2 import medianBlur, drawContours, contourArea, findContours, threshold, cvtColor, imread, resize,\
-                getStructuringElement, morphologyEx, \
+                getStructuringElement, morphologyEx, boundingRect, \
                 INTER_CUBIC, INTER_LANCZOS4, COLOR_RGB2HSV, THRESH_BINARY, THRESH_BINARY_INV, THRESH_TOZERO, THRESH_TOZERO_INV,\
                       RETR_LIST, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE, MORPH_ELLIPSE, MORPH_OPEN, MORPH_ERODE
 from skimage.measure import block_reduce
@@ -197,6 +197,20 @@ class BF_image():
         return drawContours(zeros_like(self.bacteria_image_preprocessed),
                             [contour],
                             contourIdx=-1, color=(0, 255, 0), thickness=-1).astype(float64)[:,:,1]/255
+    
+    def all_object_features(self):
+        '''Return the features of all objects on the segmented image'''
+        output = {}
+        for id, object in self.objects_db.items():
+            x, y, w, h = boundingRect(object.object_countour_coords)
+            object_mask = (drawContours(zeros((h, w, 3)),
+                                        [object.object_countour_coords - array([x,y]).reshape(1, 1, 2)],
+                                        contourIdx=-1, color=(0, 255, 0), thickness=-1)[:,:,1]/255).astype(uint8)
+            output[id] = {
+                'mask': object_mask.reshape(*object_mask.shape, 1),
+                'masked_object': object_mask.reshape(*object_mask.shape, 1) * self.bacteria_image_preprocessed[y:y + h, x:x + w]
+            }
+        return output
 
 class BF_object():
     def __init__(self, id : str, type : str, contour_coords : list):
