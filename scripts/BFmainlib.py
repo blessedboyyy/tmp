@@ -1,12 +1,12 @@
 import os
 
-from numpy import clip, median, zeros_like, argmax, histogram, zeros, mean, std, array, uint8, float64
+from numpy import bincount, where, clip, median, zeros_like, argmax, histogram, zeros, mean, std, array, uint8, float64
 from numpy import max as npmax
 from cv2 import medianBlur, drawContours, contourArea, findContours, threshold, cvtColor, imread, resize,\
-                getStructuringElement, morphologyEx, boundingRect, \
+                getStructuringElement, morphologyEx, boundingRect, moments, arcLength, \
                 INTER_CUBIC, INTER_LANCZOS4, COLOR_RGB2HSV, THRESH_BINARY, THRESH_BINARY_INV, THRESH_TOZERO, THRESH_TOZERO_INV,\
                       RETR_LIST, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE, MORPH_ELLIPSE, MORPH_OPEN, MORPH_ERODE
-from skimage.measure import block_reduce
+from skimage.measure import block_reduce, regionprops_table
 from skimage.util import invert
 from skimage.feature import hessian_matrix, hessian_matrix_eigvals
 from skimage.segmentation import watershed
@@ -109,6 +109,7 @@ class BF_image():
 
         Class is initializing with dark image and zero objects
         '''
+        self.path = ''
         self.bacteria_image_loaded = zeros((1216, 1616, 3))
         self.bacteria_image_preprocessed = zeros((1216, 1616, 3))
         self.objects_db = {}
@@ -131,7 +132,8 @@ class BF_image():
         '''
         # TODO: add possible fixes for utf names
         assert os.path.isfile(path)
-        self.bacteria_image_loaded = imread(path)
+        self.path = path
+        self.bacteria_image_loaded = imread(self.path)
         self.bacteria_image_loaded = self.bacteria_image_loaded[:,:,::-1]
 
         if self.verbose:
@@ -208,7 +210,22 @@ class BF_image():
                                         contourIdx=-1, color=(0, 255, 0), thickness=-1)[:,:,1]/255).astype(uint8)
             output[id] = {
                 'mask': object_mask.reshape(*object_mask.shape, 1),
-                'masked_object': object_mask.reshape(*object_mask.shape, 1) * self.bacteria_image_preprocessed[y:y + h, x:x + w]
+                'masked_object': object_mask.reshape(*object_mask.shape, 1) * self.bacteria_image_preprocessed[y:y + h, x:x + w],
+                'coords':{
+                    'x': x,
+                    'y': y,
+                    'w': w,
+                    'h': h,
+                },
+                'color_props':{
+                    'red_peak': bincount(self.bacteria_image_preprocessed[y:y + h, x:x + w][:,:,0][where(object_mask == 1)]).argmax(),
+                    'green_peak': bincount(self.bacteria_image_preprocessed[y:y + h, x:x + w][:,:,1][where(object_mask == 1)]).argmax(),
+                    'blue_peak': bincount(self.bacteria_image_preprocessed[y:y + h, x:x + w][:,:,2][where(object_mask == 1)]).argmax(),
+                    'red_median': median(self.bacteria_image_preprocessed[y:y + h, x:x + w][:,:,0][where(object_mask == 1)]),
+                    'green_median': median(self.bacteria_image_preprocessed[y:y + h, x:x + w][:,:,1][where(object_mask == 1)]),
+                    'blue_median': median(self.bacteria_image_preprocessed[y:y + h, x:x + w][:,:,2][where(object_mask == 1)]),
+                },
+                'region_props': regionprops_table(object_mask, properties=('perimeter', 'area', 'axis_major_length', 'axis_minor_length', 'eccentricity', 'orientation'))
             }
         return output
 
