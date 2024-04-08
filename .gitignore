@@ -1,2 +1,3 @@
 Bacteria_finder_GUI
 Bacteria_finder_core/__pycache__
+*.pyc
