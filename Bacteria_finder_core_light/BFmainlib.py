@@ -1,0 +1,245 @@
+import os
+
+from numpy import fromfile, bincount, where, clip, median, zeros_like, argmax, histogram, zeros, mean, std, array, uint8, float64
+from numpy import max as npmax
+from cv2 import medianBlur, drawContours, contourArea, findContours, threshold, cvtColor, imread, imdecode, resize,\
+                getStructuringElement, morphologyEx, boundingRect, moments, arcLength, \
+                INTER_CUBIC, INTER_LANCZOS4, COLOR_RGB2HSV, THRESH_BINARY, THRESH_BINARY_INV, THRESH_TOZERO, THRESH_TOZERO_INV,\
+                      RETR_LIST, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE, MORPH_ELLIPSE, MORPH_OPEN, MORPH_ERODE, IMREAD_UNCHANGED
+from skimage.measure import block_reduce, regionprops_table
+from skimage.util import invert
+from skimage.feature import hessian_matrix, hessian_matrix_eigvals
+from skimage.segmentation import watershed
+from scipy.ndimage import label, distance_transform_edt
+
+def detect_ridges(image_gray, sigma=2.0):
+    '''Return eigenvalues of Hessian matrix processed image'''
+    lambda1, lambda2 = hessian_matrix_eigvals(hessian_matrix(image_gray, sigma, use_gaussian_derivatives=True))
+    return lambda1, lambda2
+
+def HSV_transform(image : array) -> array:
+    '''
+    Transform RGB image to HSV color space
+    '''
+    return cvtColor(image, COLOR_RGB2HSV)
+    
+def HSV_threshold(image : array, type : str = 'simple') -> array:
+    '''
+    Perform thresholding of HSV image (hue channel)
+
+    'simple' : threshold value is 60 (green color) and strategy is THRESH_BINARY
+
+    'bact' : some area (not one value) in hue space is set to zero (corresponding to background).
+    The 'bact' strategy seraches for maximum value in histogram and sets to zero every color +- margin (hardcoded) from argmax
+
+    'color': some area (hardcoded) in hue space is set to its original value, the rest is set to zero.
+    This strategy puts to zero every "non-red" and "non-purple" value
+    '''
+    # TODO: remove hardcode
+    assert type == 'simple_hue' or type == 'bact_hue' or type == 'color_hue' \
+            or type == 'simple_value'
+
+    if type == 'simple_hue':
+        return threshold(image[:,:,0], 80, 180, THRESH_BINARY)[1]
+    elif type == 'simple_value':
+        ksize = 5
+        value_image_median = median(image[:,:,2])
+        value_image_max = npmax(image[:,:,2])
+
+        return morphologyEx(threshold(image[:,:,2], value_image_median - 20, value_image_max,THRESH_BINARY_INV)[1].copy(),
+                            MORPH_OPEN, getStructuringElement(MORPH_ELLIPSE, (ksize, ksize)))/255
+    elif type == 'bact_hue':
+        margin = 5
+        image_hue_hist = histogram(image[:,:,0].flatten(), bins=[el for el in range(181)])
+        background_max = argmax(image_hue_hist[0])
+
+        return threshold(image[:,:,0], background_max + margin, 181, THRESH_BINARY)[1] + threshold(image[:,:,0], background_max - margin, 181, THRESH_BINARY_INV)[1]
+    elif type == 'color_hue':
+        image_hue_hist = histogram(image[:,:,0].flatten(), bins=[el for el in range(181)])
+        margin_min = argmax(image_hue_hist[0])-5
+        margin_max = argmax(image_hue_hist[0])+30
+
+        return threshold(image[:,:,0], margin_min, 181, THRESH_BINARY_INV)[1] + threshold(image[:,:,0], margin_max, 181, THRESH_BINARY)[1]
+    
+def HSV_segmenting(image : array, type: str = 'simple') -> list:
+    '''
+    Segment an image by using its HSV colorspace
+    '''
+    # TODO: add different types of HSV segmenting
+
+    assert type == 'simple' or type == 'ridges'
+
+    if type == 'simple':
+        image_hsv = HSV_transform(image)
+        image_hsv_mask = HSV_threshold(image_hsv, type = 'simple_hue')
+        contours_hsv, hierarchy_hsv = findContours(image_hsv_mask, RETR_LIST, CHAIN_APPROX_SIMPLE)
+        contours_hsv_mask = sorted(contours_hsv, key = contourArea, reverse= True)
+    elif type == 'ridges':
+        image_hsv = HSV_transform(image)
+        image_hue_mask = HSV_threshold(image_hsv, type = 'simple_hue')
+        image_value_mask = HSV_threshold(image_hsv, type = 'simple_value')
+
+        image_ridges = detect_ridges(invert(HSV_transform(image)[:,:,2]), sigma=2.5)[0]
+        image_ridges_mean = mean(image_ridges)
+        image_ridges_std = std(image_ridges)
+        image_ridges_markers = threshold(image_ridges, image_ridges_mean + image_ridges_std/2, 1, THRESH_BINARY_INV)[1]
+
+        image_watershed_mask = clip(image_value_mask + image_hue_mask, None, 1)
+
+        coords = image_watershed_mask*image_ridges_markers
+        markers, _ = label(coords)
+        distance = distance_transform_edt(image_ridges_markers)
+
+        labels = watershed(image = -distance,
+                        markers = markers,
+                        mask = image_watershed_mask,
+                        watershed_line=True)
+        labels_binary = morphologyEx(clip(labels, None, 1).astype(uint8),
+                            MORPH_ERODE, getStructuringElement(MORPH_ELLIPSE, (2, 2)))
+
+        contours_hsv, hierarchy_hsv = findContours(labels_binary, RETR_LIST, CHAIN_APPROX_SIMPLE)
+        contours_hsv_mask = sorted(contours_hsv, key = contourArea, reverse= True)
+
+    return contours_hsv_mask
+
+class BF_image():
+    def __init__(self, verbose = False):
+        '''
+        BF_image: base class of Bacteria Finder program
+
+        Class is initializing with dark image and zero objects
+        '''
+        self.path = ''
+        self.bacteria_image_loaded = zeros((1216, 1616, 3))
+        self.bacteria_image_preprocessed = zeros((1216, 1616, 3))
+        self.objects_db = {}
+
+        self.verbose = verbose
+
+    def object_new_add(self, contour : array):
+        '''
+        Function, that adds an object to BF_image class
+        '''
+        new_id = str(len(self.objects_db.keys()) + 1)
+        self.objects_db[new_id] = BF_object(new_id, 'undefined', contour)
+
+        if self.verbose:
+            print(f'Added object {new_id=}')
+    
+    def load_image(self, how : str = 'path', path : str = '', image : array = []):
+        '''
+        Function, that loads image and replace channels from BRG to RGB
+        '''
+        assert how == 'path' or how == 'image'
+        if how == 'path':
+            assert os.path.isfile(path)
+            self.path = path
+            self.bacteria_image_loaded = imdecode(fromfile(self.path, dtype=uint8), IMREAD_UNCHANGED)
+            self.bacteria_image_loaded = self.bacteria_image_loaded[:,:,::-1]
+        elif how == 'image':
+            self.bacteria_image_loaded = image.copy()
+            self.bacteria_image_loaded = self.bacteria_image_loaded[:,:,::-1]
+
+        if self.verbose:
+            print('Successfully loaded an image')
+
+    def preprocess_image(self):
+        '''
+        Function, that performs preprocessing of a loaded image
+
+        As for now image preprocessing consists of shrinking by average pooling and restoring shape by
+        cubic interpolation
+        '''
+        # TODO: add different methods and swithes in the future
+        self.bacteria_image_preprocessed = resize(uint8(
+            block_reduce(self.bacteria_image_loaded, (2,2,1), mean, func_kwargs={'dtype': float64})),
+            self.bacteria_image_loaded.shape[1::-1], interpolation = INTER_CUBIC)
+        
+        
+        if self.verbose:
+            print('Successfully preprocessed an image')
+        
+    def segment_image(self, type: str = 'simple'):
+        '''
+        Main pipeline for segmentation
+        '''
+        contours_hsv_mask = HSV_segmenting(self.bacteria_image_preprocessed, type)
+        for contour in contours_hsv_mask:
+            # if contourArea(contour) < 100:
+                self.object_new_add(contour)
+
+        if self.verbose:
+            print('Successfully HSV:segmented an image')
+
+    def segment_draw(self) -> array:
+        '''
+        Draw segmented image depending on the current state of segmentation
+        '''
+        objects_undefined_list = []
+        for object in self.objects_db.values():
+            if object.object_type == 'undefined':
+                objects_undefined_list.append(object.object_countour_coords)
+
+        return drawContours(self.bacteria_image_preprocessed.copy(),
+                            objects_undefined_list,
+                            contourIdx=-1, color=(0, 255, 0), thickness=1)
+    
+    def object_draw(self, contour = None) -> array:
+        '''
+        Draw the specified contour on an image
+        '''
+        assert contour is not None
+
+        return drawContours(self.bacteria_image_preprocessed.copy(),
+                            [contour],
+                            contourIdx=-1, color=(0, 255, 0), thickness=1)
+    
+    def object_draw_mask(self, contour = None) -> array:
+        '''
+        Draw the mask of specified contour on an image
+        '''
+        assert contour is not None
+
+        return drawContours(zeros_like(self.bacteria_image_preprocessed),
+                            [contour],
+                            contourIdx=-1, color=(0, 255, 0), thickness=-1).astype(float64)[:,:,1]/255
+    
+    def all_object_features(self):
+        '''Return the features of all objects on the segmented image'''
+        output = {}
+        for id, object in self.objects_db.items():
+            x, y, w, h = boundingRect(object.object_countour_coords)
+            object_mask = (drawContours(zeros((h, w, 3)),
+                                        [object.object_countour_coords - array([x,y]).reshape(1, 1, 2)],
+                                        contourIdx=-1, color=(0, 255, 0), thickness=-1)[:,:,1]/255).astype(uint8)
+            output[id] = {
+                'mask': object_mask.reshape(*object_mask.shape, 1),
+                'masked_object': object_mask.reshape(*object_mask.shape, 1) * self.bacteria_image_preprocessed[y:y + h, x:x + w],
+                'coords':{
+                    'x': x,
+                    'y': y,
+                    'w': w,
+                    'h': h,
+                },
+                'color_props':{
+                    'red_peak': bincount(self.bacteria_image_preprocessed[y:y + h, x:x + w][:,:,0][where(object_mask == 1)]).argmax(),
+                    'green_peak': bincount(self.bacteria_image_preprocessed[y:y + h, x:x + w][:,:,1][where(object_mask == 1)]).argmax(),
+                    'blue_peak': bincount(self.bacteria_image_preprocessed[y:y + h, x:x + w][:,:,2][where(object_mask == 1)]).argmax(),
+                    'red_median': median(self.bacteria_image_preprocessed[y:y + h, x:x + w][:,:,0][where(object_mask == 1)]),
+                    'green_median': median(self.bacteria_image_preprocessed[y:y + h, x:x + w][:,:,1][where(object_mask == 1)]),
+                    'blue_median': median(self.bacteria_image_preprocessed[y:y + h, x:x + w][:,:,2][where(object_mask == 1)]),
+                },
+                'region_props': regionprops_table(object_mask, properties=('perimeter', 'area', 'axis_major_length', 'axis_minor_length', 'eccentricity', 'orientation'))
+            }
+        return output
+
+class BF_object():
+    def __init__(self, id : str, type : str, contour_coords : list):
+        '''
+        BF_object: object on an image class of Bacteria Finder program
+
+        type: undefined, bacilli, coccus, group, misc
+        '''
+        self.object_id = id
+        self.object_type = type
+        self.object_countour_coords = contour_coords
