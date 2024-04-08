@@ -288,19 +288,19 @@ p, li { white-space: pre-wrap; }
            <x>10</x>
            <y>20</y>
            <width>160</width>
-           <height>151</height>
+           <height>141</height>
           </rect>
          </property>
          <layout class="QVBoxLayout" name="ShowObjectsverticalLayout">
           <item>
-           <widget class="QRadioButton" name="radioButton">
+           <widget class="QRadioButton" name="OriginalradioButton">
             <property name="text">
              <string>Original</string>
             </property>
            </widget>
           </item>
           <item>
-           <widget class="QRadioButton" name="AllradioButton">
+           <widget class="QRadioButton" name="SegmentedradioButton">
             <property name="text">
              <string>Segmented</string>
             </property>
