@@ -23,7 +23,7 @@ class Ui_MainWindow(object):
 
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(1024, 804)
+        MainWindow.resize(1024, 831)
         MainWindow.setMinimumSize(QtCore.QSize(0, 0))
         MainWindow.setMaximumSize(QtCore.QSize(16777215, 16777215))
         font = QtGui.QFont()
@@ -35,6 +35,7 @@ class Ui_MainWindow(object):
         self.horizontalLayout_2 = QtWidgets.QHBoxLayout(self.centralwidget)
         self.horizontalLayout_2.setObjectName("horizontalLayout_2")
         self.ImageGroupBox = QtWidgets.QGroupBox(self.centralwidget)
+        self.ImageGroupBox.setEnabled(True)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
@@ -46,21 +47,21 @@ class Ui_MainWindow(object):
         font.setPointSize(14)
         self.ImageGroupBox.setFont(font)
         self.ImageGroupBox.setObjectName("ImageGroupBox")
-        self.horizontalLayout = QtWidgets.QHBoxLayout(self.ImageGroupBox)
-        self.horizontalLayout.setObjectName("horizontalLayout")
+        self.verticalLayout = QtWidgets.QVBoxLayout(self.ImageGroupBox)
+        self.verticalLayout.setObjectName("verticalLayout")
         self.ImageLabel = QtWidgets.QLabel(self.ImageGroupBox)
         self.ImageLabel.setText("")
         self.ImageLabel.setPixmap(QPixmap("Bacteria_finder_GUI/blank.png"))
         self.ImageLabel.setScaledContents(True)
         self.ImageLabel.setObjectName("ImageLabel")
-        self.horizontalLayout.addWidget(self.ImageLabel)
+        self.verticalLayout.addWidget(self.ImageLabel)
         self.horizontalLayout_2.addWidget(self.ImageGroupBox)
         spacerItem = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
         self.horizontalLayout_2.addItem(spacerItem)
         self.ButtonsLayout = QtWidgets.QVBoxLayout()
         self.ButtonsLayout.setSizeConstraint(QtWidgets.QLayout.SetFixedSize)
         self.ButtonsLayout.setObjectName("ButtonsLayout")
-        spacerItem1 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
+        spacerItem1 = QtWidgets.QSpacerItem(40, 15, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
         self.ButtonsLayout.addItem(spacerItem1)
         self.LoadImageButton = QtWidgets.QPushButton(self.centralwidget)
         font = QtGui.QFont()
@@ -69,7 +70,7 @@ class Ui_MainWindow(object):
         self.LoadImageButton.setFont(font)
         self.LoadImageButton.setObjectName("LoadImageButton")
         self.ButtonsLayout.addWidget(self.LoadImageButton)
-        spacerItem2 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
+        spacerItem2 = QtWidgets.QSpacerItem(40, 15, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
         self.ButtonsLayout.addItem(spacerItem2)
         self.SegmentImageButton = QtWidgets.QPushButton(self.centralwidget)
         self.SegmentImageButton.setEnabled(False)
@@ -79,7 +80,7 @@ class Ui_MainWindow(object):
         self.SegmentImageButton.setFont(font)
         self.SegmentImageButton.setObjectName("SegmentImageButton")
         self.ButtonsLayout.addWidget(self.SegmentImageButton)
-        spacerItem3 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
+        spacerItem3 = QtWidgets.QSpacerItem(40, 15, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
         self.ButtonsLayout.addItem(spacerItem3)
         self.ClassifyImageButton = QtWidgets.QPushButton(self.centralwidget)
         self.ClassifyImageButton.setEnabled(False)
@@ -89,7 +90,7 @@ class Ui_MainWindow(object):
         self.ClassifyImageButton.setFont(font)
         self.ClassifyImageButton.setObjectName("ClassifyImageButton")
         self.ButtonsLayout.addWidget(self.ClassifyImageButton)
-        spacerItem4 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
+        spacerItem4 = QtWidgets.QSpacerItem(40, 15, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
         self.ButtonsLayout.addItem(spacerItem4)
         self.SaveImageButton = QtWidgets.QPushButton(self.centralwidget)
         self.SaveImageButton.setEnabled(False)
@@ -112,8 +113,6 @@ class Ui_MainWindow(object):
         self.CountertextBrowser.setMaximumSize(QtCore.QSize(16777215, 110))
         self.CountertextBrowser.setObjectName("CountertextBrowser")
         self.ButtonsLayout.addWidget(self.CountertextBrowser)
-        spacerItem6 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
-        self.ButtonsLayout.addItem(spacerItem6)
         self.ShowObjectsgroupBox = QtWidgets.QGroupBox(self.centralwidget)
         self.ShowObjectsgroupBox.setEnabled(False)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
@@ -124,14 +123,17 @@ class Ui_MainWindow(object):
         self.ShowObjectsgroupBox.setMinimumSize(QtCore.QSize(0, 170))
         self.ShowObjectsgroupBox.setObjectName("ShowObjectsgroupBox")
         self.verticalLayoutWidget = QtWidgets.QWidget(self.ShowObjectsgroupBox)
-        self.verticalLayoutWidget.setGeometry(QtCore.QRect(10, 20, 160, 126))
+        self.verticalLayoutWidget.setGeometry(QtCore.QRect(10, 20, 160, 141))
         self.verticalLayoutWidget.setObjectName("verticalLayoutWidget")
         self.ShowObjectsverticalLayout = QtWidgets.QVBoxLayout(self.verticalLayoutWidget)
         self.ShowObjectsverticalLayout.setContentsMargins(0, 0, 0, 0)
         self.ShowObjectsverticalLayout.setObjectName("ShowObjectsverticalLayout")
-        self.AllradioButton = QtWidgets.QRadioButton(self.verticalLayoutWidget)
-        self.AllradioButton.setObjectName("AllradioButton")
-        self.ShowObjectsverticalLayout.addWidget(self.AllradioButton)
+        self.OriginalradioButton = QtWidgets.QRadioButton(self.verticalLayoutWidget)
+        self.OriginalradioButton.setObjectName("OriginalradioButton")
+        self.ShowObjectsverticalLayout.addWidget(self.OriginalradioButton)
+        self.SegmentedradioButton = QtWidgets.QRadioButton(self.verticalLayoutWidget)
+        self.SegmentedradioButton.setObjectName("SegmentedradioButton")
+        self.ShowObjectsverticalLayout.addWidget(self.SegmentedradioButton)
         self.BacillusradioButton = QtWidgets.QRadioButton(self.verticalLayoutWidget)
         self.BacillusradioButton.setObjectName("BacillusradioButton")
         self.ShowObjectsverticalLayout.addWidget(self.BacillusradioButton)
@@ -145,12 +147,12 @@ class Ui_MainWindow(object):
         self.MiscradioButton.setObjectName("MiscradioButton")
         self.ShowObjectsverticalLayout.addWidget(self.MiscradioButton)
         self.ButtonsLayout.addWidget(self.ShowObjectsgroupBox)
-        spacerItem7 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
-        self.ButtonsLayout.addItem(spacerItem7)
+        spacerItem6 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
+        self.ButtonsLayout.addItem(spacerItem6)
         self.horizontalLayout_2.addLayout(self.ButtonsLayout)
         MainWindow.setCentralWidget(self.centralwidget)
         self.menubar = QtWidgets.QMenuBar(MainWindow)
-        self.menubar.setGeometry(QtCore.QRect(0, 0, 1024, 22))
+        self.menubar.setGeometry(QtCore.QRect(0, 0, 1024, 26))
         self.menubar.setObjectName("menubar")
         MainWindow.setMenuBar(self.menubar)
         self.statusbar = QtWidgets.QStatusBar(MainWindow)
@@ -172,7 +174,8 @@ class Ui_MainWindow(object):
         self.ClassifyImageButton.clicked.connect(self.ClassifyImageButtonPushed)
 
         # Change displayed objects by radiobuttons
-        self.AllradioButton.toggled.connect(self.RadioButtonToggled)
+        self.OriginalradioButton.toggled.connect(self.RadioButtonToggled)
+        self.SegmentedradioButton.toggled.connect(self.RadioButtonToggled)
         self.BacillusradioButton.toggled.connect(self.RadioButtonToggled)
         self.CoccusradioButton.toggled.connect(self.RadioButtonToggled)
         self.GroupsradioButton.toggled.connect(self.RadioButtonToggled)
@@ -187,17 +190,18 @@ class Ui_MainWindow(object):
         self.ClassifyImageButton.setText(_translate("MainWindow", "Classify"))
         self.SaveImageButton.setText(_translate("MainWindow", "Save image"))
         self.CountertextBrowser.setHtml(_translate("MainWindow", "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" \"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"
-"<html><head><meta name=\"qrichtext\" content=\"1\" /><style type=\"text/css\">\n"
-"p, li { white-space: pre-wrap; }\n"
-"</style></head><body style=\" font-family:\'MS Sans Serif\'; font-size:9.75pt; font-weight:400; font-style:normal;\">\n"
-"<p align=\"center\" style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Counter:</p>\n"
-"<p align=\"center\" style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Objects = 0</p>\n"
-"<p align=\"center\" style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Bacillus = 0</p>\n"
-"<p align=\"center\" style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Coccus = 0</p>\n"
-"<p align=\"center\" style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Groups = 0</p>\n"
-"<p align=\"center\" style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Misc = 0</p></body></html>"))
-        self.ShowObjectsgroupBox.setTitle(_translate("MainWindow", "Show objects"))
-        self.AllradioButton.setText(_translate("MainWindow", "All"))
+            "<html><head><meta name=\"qrichtext\" content=\"1\" /><style type=\"text/css\">\n"
+            "p, li { white-space: pre-wrap; }\n"
+            "</style></head><body style=\" font-family:\'MS Sans Serif\'; font-size:7.8pt; font-weight:400; font-style:normal;\">\n"
+            "<p align=\"center\" style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><span style=\" font-size:9.75pt;\">Counter:</span></p>\n"
+            "<p align=\"center\" style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><span style=\" font-size:9.75pt;\">Objects = 0</span></p>\n"
+            "<p align=\"center\" style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><span style=\" font-size:9.75pt;\">Bacillus = 0</span></p>\n"
+            "<p align=\"center\" style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><span style=\" font-size:9.75pt;\">Coccus = 0</span></p>\n"
+            "<p align=\"center\" style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><span style=\" font-size:9.75pt;\">Groups = 0</span></p>\n"
+            "<p align=\"center\" style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><span style=\" font-size:9.75pt;\">Misc = 0</span></p></body></html>"))
+        self.ShowObjectsgroupBox.setTitle(_translate("MainWindow", "Show image"))
+        self.OriginalradioButton.setText(_translate("MainWindow", "Original"))
+        self.SegmentedradioButton.setText(_translate("MainWindow", "Segmented"))
         self.BacillusradioButton.setText(_translate("MainWindow", "Bacillus"))
         self.CoccusradioButton.setText(_translate("MainWindow", "Coccus"))
         self.GroupsradioButton.setText(_translate("MainWindow", "Groups"))
@@ -207,9 +211,10 @@ class Ui_MainWindow(object):
         '''
         Updates shown image by which radio button is pressed
         '''
-        pass
-        # if self.AllradioButton.isChecked():
-        #     self.shown_bacteria_image = self.classified_bacteria_image.copy()
+        if self.OriginalradioButton.isChecked():
+            self.shown_bacteria_image = self.original_bacteria_image.copy()
+        elif self.SegmentedradioButton.isChecked():
+            self.shown_bacteria_image = self.segmented_bacteria_image.copy()
         # elif self.BacillusradioButton.isChecked():
         #     self.shown_bacteria_image = self.segmentor.image_out_bacili.copy()
         # elif self.CoccusradioButton.isChecked():
@@ -218,7 +223,7 @@ class Ui_MainWindow(object):
         #     self.shown_bacteria_image = self.segmentor.image_out_grouped.copy()
         # elif self.MiscradioButton.isChecked():
         #     self.shown_bacteria_image = self.segmentor.image_out_misc.copy()
-        # self.UpdateImage()
+        self.UpdateImage()
     
     def UpdateCounter(self):
         '''
@@ -260,8 +265,9 @@ class Ui_MainWindow(object):
             self.segmented_bacteria_image = self.segmentor.segment_draw()[:,:,::-1].copy()
             self.CountertextBrowser.setEnabled(True)
             self.ClassifyImageButton.setEnabled(True)
+            self.ShowObjectsgroupBox.setEnabled(True)
         if self.ShowObjectsgroupBox.isEnabled():
-            self.AllradioButton.setChecked(True)
+            self.SegmentedradioButton.setChecked(True)
         self.UpdateCounter()
         self.shown_bacteria_image = self.segmented_bacteria_image.copy()
         self.UpdateImage()
@@ -321,6 +327,11 @@ class Ui_MainWindow(object):
         self.LoadImageButton.setEnabled(True)
         self.ShowObjectsgroupBox.setEnabled(False)
         self.CountertextBrowser.setEnabled(False)
+
+        self.BacillusradioButton.setEnabled(False)
+        self.CoccusradioButton.setEnabled(False)
+        self.GroupsradioButton.setEnabled(False)
+        self.MiscradioButton.setEnabled(False)
 
         # Displaying the image
         pixmap = QPixmap(self.File_load_path)
