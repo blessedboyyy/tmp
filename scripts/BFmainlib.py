@@ -162,7 +162,7 @@ class BF_image():
         '''
         contours_hsv_mask = HSV_segmenting(self.bacteria_image_preprocessed, type)
         for contour in contours_hsv_mask:
-            # if contourArea(contour) < 100:
+            if contourArea(contour) >= 9:
                 self.object_new_add(contour)
 
         if self.verbose:
