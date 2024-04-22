@@ -4,7 +4,7 @@ path.append('../Bacteria_finder')
 path.append('../Bacteria_finder/Bacteria_finder_GUI')
 path.append('../Bacteria_finder/Bacteria_finder_core_light')
 
-from cv2 import IMREAD_UNCHANGED, imdecode, imencode
+from cv2 import IMREAD_COLOR, IMREAD_UNCHANGED, imdecode, imencode
 from numpy import fromfile, uint8
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtGui import QImage, QPixmap
@@ -317,7 +317,7 @@ class Ui_MainWindow(object):
         self.classified_bacteria_image = None
 
         # Saving the image for future use in cv2
-        self.shown_bacteria_image = imdecode(fromfile(self.File_load_path, dtype=uint8), IMREAD_UNCHANGED)
+        self.shown_bacteria_image = imdecode(fromfile(self.File_load_path, dtype=uint8), IMREAD_COLOR)
         self.original_bacteria_image = self.shown_bacteria_image.copy()
 
         # Enabling and disabling widgets
