@@ -5,7 +5,7 @@ from numpy import max as npmax
 from cv2 import medianBlur, drawContours, contourArea, findContours, threshold, cvtColor, imread, imdecode, resize,\
                 getStructuringElement, morphologyEx, boundingRect, moments, arcLength, \
                 INTER_CUBIC, INTER_LANCZOS4, COLOR_RGB2HSV, THRESH_BINARY, THRESH_BINARY_INV, THRESH_TOZERO, THRESH_TOZERO_INV,\
-                      RETR_LIST, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE, MORPH_ELLIPSE, MORPH_OPEN, MORPH_ERODE, IMREAD_UNCHANGED
+                      RETR_LIST, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE, MORPH_ELLIPSE, MORPH_OPEN, MORPH_ERODE, IMREAD_UNCHANGED, IMREAD_COLOR
 from skimage.measure import block_reduce, regionprops_table
 from skimage.util import invert
 from skimage.feature import hessian_matrix, hessian_matrix_eigvals
@@ -133,7 +133,7 @@ class BF_image():
         # TODO: add possible fixes for utf names
         assert os.path.isfile(path)
         self.path = path
-        self.bacteria_image_loaded = imdecode(fromfile(self.path, dtype=uint8), IMREAD_UNCHANGED)
+        self.bacteria_image_loaded = imdecode(fromfile(self.path, dtype=uint8), IMREAD_COLOR)
         # self.bacteria_image_loaded = imread(self.path)
         self.bacteria_image_loaded = self.bacteria_image_loaded[:,:,::-1]
 
