@@ -2,7 +2,7 @@ import os
 
 from numpy import fromfile, bincount, where, clip, median, zeros_like, argmax, histogram, zeros, mean, std, array, uint8, float64
 from numpy import max as npmax
-from cv2 import medianBlur, drawContours, contourArea, findContours, threshold, cvtColor, imread, imdecode, resize,\
+from cv2 import medianBlur, drawContours, contourArea, findContours, threshold, cvtColor, imread, imencode, imdecode, resize,\
                 getStructuringElement, morphologyEx, boundingRect, moments, arcLength, \
                 INTER_CUBIC, INTER_LANCZOS4, COLOR_RGB2HSV, THRESH_BINARY, THRESH_BINARY_INV, THRESH_TOZERO, THRESH_TOZERO_INV,\
                       RETR_LIST, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE, MORPH_ELLIPSE, MORPH_OPEN, MORPH_ERODE, IMREAD_UNCHANGED, IMREAD_COLOR
@@ -200,6 +200,19 @@ class BF_image():
         return drawContours(zeros_like(self.bacteria_image_preprocessed),
                             [contour],
                             contourIdx=-1, color=(0, 255, 0), thickness=-1).astype(float64)[:,:,1]/255
+    
+    def all_object_save(self, save_path : str):
+        '''Save all segmented objects'''
+        if not os.path.isdir(save_path):
+            save_path = os.path.dirname(self.path)
+
+        for id, object in self.objects_db.items():
+            x, y, w, h = boundingRect(object.object_countour_coords)
+            _, im_buf_arr = imencode('.bmp', self.bacteria_image_preprocessed[y:y + h, x:x + w,::-1])
+            im_buf_arr.tofile(os.path.join(save_path, os.path.basename(self.path)).split('.bmp')[-2] + f"_SEG_{id}.bmp")
+
+        if self.verbose == True:
+            print(f'Successfully saved objects to {save_path}')
     
     def all_object_features(self):
         '''Return the features of all objects on the segmented image'''
