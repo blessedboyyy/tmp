@@ -139,6 +139,8 @@ class BF_image():
         elif how == 'image':
             self.bacteria_image_loaded = image.copy()
             self.bacteria_image_loaded = self.bacteria_image_loaded[:,:,::-1]
+        
+        self.objects_db = {}
 
         if self.verbose:
             print('Successfully loaded an image')
