@@ -215,7 +215,7 @@
           <rect>
            <x>10</x>
            <y>20</y>
-           <width>141</width>
+           <width>147</width>
            <height>26</height>
           </rect>
          </property>
@@ -242,6 +242,19 @@
              <double>2.500000000000000</double>
             </property>
            </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacer_4">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
           </item>
          </layout>
         </widget>
