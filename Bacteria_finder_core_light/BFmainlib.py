@@ -61,7 +61,7 @@ def HSV_threshold(image : array, type : str = 'simple') -> array:
 
         return threshold(image[:,:,0], margin_min, 181, THRESH_BINARY_INV)[1] + threshold(image[:,:,0], margin_max, 181, THRESH_BINARY)[1]
     
-def HSV_segmenting(image : array, type: str = 'simple') -> list:
+def HSV_segmenting(image : array, type: str = 'simple', sigma: float = 2.5) -> list:
     '''
     Segment an image by using its HSV colorspace
     '''
@@ -79,7 +79,7 @@ def HSV_segmenting(image : array, type: str = 'simple') -> list:
         image_hue_mask = HSV_threshold(image_hsv, type = 'simple_hue')
         image_value_mask = HSV_threshold(image_hsv, type = 'simple_value')
 
-        image_ridges = detect_ridges(invert(HSV_transform(image)[:,:,2]), sigma=2.5)[0]
+        image_ridges = detect_ridges(invert(HSV_transform(image)[:,:,2]), sigma=sigma)[0]
         image_ridges_mean = mean(image_ridges)
         image_ridges_std = std(image_ridges)
         image_ridges_markers = threshold(image_ridges, image_ridges_mean + image_ridges_std/2, 1, THRESH_BINARY_INV)[1]
@@ -159,13 +159,13 @@ class BF_image():
         if self.verbose:
             print('Successfully preprocessed an image')
         
-    def segment_image(self, type: str = 'simple'):
+    def segment_image(self, type: str = 'simple', sigma: float = 2.5):
         '''
         Main pipeline for segmentation
         '''
-        contours_hsv_mask = HSV_segmenting(self.bacteria_image_preprocessed, type)
+        contours_hsv_mask = HSV_segmenting(self.bacteria_image_preprocessed, type, sigma)
         for contour in contours_hsv_mask:
-            if contourArea(contour) >= 9:
+            if contourArea(contour) >= 25:
                 self.object_new_add(contour)
 
         if self.verbose:
