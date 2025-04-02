@@ -1,10 +1,10 @@
 
 from sys import path
 
-path.append('../Bacteria_finder')
-path.append('../Bacteria_finder/Bacteria_finder_core')
+path.append('../tmp')
+path.append('../tmp/Bacteria_finder_core')
 from cellpose import core
-from cellpose_omni import models
+from omnipose import models
 from classifier import MobileNetV2
 from cv2 import (COLOR_BGR2RGB, THRESH_TRIANGLE, THRESH_TRUNC, bilateralFilter,
                  cvtColor, threshold)

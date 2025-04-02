@@ -1,8 +1,8 @@
 from sys import path
 
-path.append('../Bacteria_finder')
-path.append('../Bacteria_finder/Bacteria_finder_GUI')
-path.append('../Bacteria_finder/Bacteria_finder_core')
+path.append('../tmp')
+path.append('../tmp/Bacteria_finder_GUI')
+path.append('../tmp/Bacteria_finder_core')
 
 from cv2 import IMREAD_UNCHANGED, imdecode, imencode
 from numpy import fromfile, uint8
