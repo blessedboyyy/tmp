@@ -3,14 +3,17 @@ from sys import path
 
 path.append('../tmp')
 path.append('../tmp/Bacteria_finder_core')
+
+import os, sys
+sys.path.insert(0, os.path.dirname(__file__))
 from cellpose import core
-from omnipose import models
+#from cellpose_omni import models
 from classifier import MobileNetV2
 from cv2 import (COLOR_BGR2RGB, THRESH_TRIANGLE, THRESH_TRUNC, bilateralFilter,
                  cvtColor, threshold)
 from numpy import (append, float32, max, min, pad, transpose, uint8, unique,
                    where, zeros_like)
-from omnipose.utils import normalize99
+#from omnipose.utils import normalize99
 from skimage.filters import sobel
 from skimage.segmentation import felzenszwalb, mark_boundaries, watershed
 from torch import cuda, device, load, tensor
@@ -53,24 +56,24 @@ class Bacteria_segmentor():
             return watershed(sobel(image))
         elif self.segmentor_name == "felzenszwalb":
             return felzenszwalb(image)
-        elif self.segmentor_name == "omnipose":
-            use_GPU = core.use_gpu()
-            model_name = 'bact_phase_omni'
-            # model_name = "bact_phase_omnitorch_0"
-            self.model = models.CellposeModel(gpu=use_GPU, model_type=model_name)
-            chans = [0,0]
-            # define parameters
-            mask_threshold = -1 
-            verbose = 0
-            transparency = True
-            rescale=None
-            omni = True
-            flow_threshold = 0
-            resample = True
-            cluster=True
-            return self.model.eval(normalize99(image),channels=chans,rescale=rescale,mask_threshold=mask_threshold,
-                                    transparency=transparency,flow_threshold=flow_threshold,omni=omni,
-                                    cluster=cluster, resample=resample,verbose=verbose)
+        # elif self.segmentor_name == "omnipose":
+        #     use_GPU = core.use_gpu()
+        #     model_name = 'bact_phase_omni'
+        #     # model_name = "bact_phase_omnitorch_0"
+        #     self.model = models.CellposeModel(gpu=use_GPU, model_type=model_name)
+        #     chans = [0,0]
+        #     # define parameters
+        #     mask_threshold = -1 
+        #     verbose = 0
+        #     transparency = True
+        #     rescale=None
+        #     omni = True
+        #     flow_threshold = 0
+        #     resample = True
+        #     cluster=True
+        #     return self.model.eval(normalize99(image),channels=chans,rescale=rescale,mask_threshold=mask_threshold,
+        #                             transparency=transparency,flow_threshold=flow_threshold,omni=omni,
+        #                             cluster=cluster, resample=resample,verbose=verbose)
         
     def get_bboxs(self, mask_img, mask_list):
         # function to return the list of coordinates of boxes
@@ -194,11 +197,3 @@ class Bacteria_segmentor():
             self.image_out_result = mark_boundaries(self.image_out_result, self.one_channel_bacteria_grouped_labels, color=(139/255, 0, 1))
             self.image_out_result = mark_boundaries(self.image_out_result, self.one_channel_bacteria_misc_labels, color=(0, 0, 0))
             return uint8(self.image_out_result*255)[:,:,::-1]
-
-
-
-
-
-
-
-

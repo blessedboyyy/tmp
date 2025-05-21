@@ -9,13 +9,18 @@ from numpy import fromfile, uint8
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtGui import QImage, QPixmap
 
+import scipy
+from scipy.fft import ifft
+scipy.iff = ifft
+
+
 from Bacteria_finder_core.segmentor import Bacteria_segmentor
 
 
 class Ui_MainWindow(object):
 
     def __init__(self):
-        self.segmentor = Bacteria_segmentor("omnipose")
+        self.segmentor = Bacteria_segmentor()
         self.original_bacteria_image = None
         self.shown_bacteria_image = None
         self.segmented_bacteria_image = None
