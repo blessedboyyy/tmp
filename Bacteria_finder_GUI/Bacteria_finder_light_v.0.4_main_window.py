@@ -10,7 +10,8 @@ import numpy as np
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from Bacteria_finder_pipeline import (
-    STAGES, GmmSettings, OtsuSettings, PipelineSettings, ProcessingResult, SlicSettings, available_methods,
+    STAGES, GmmSettings, InstanceSettings, ObjectFilterSettings, OtsuSettings,
+    PipelineSettings, ProcessingResult, SlicSettings, available_methods,
 )
 from Bacteria_finder_pipeline.worker import ProcessingWorker
 
@@ -193,6 +194,45 @@ class MainWindow(QtWidgets.QMainWindow):
         auto_layout.addWidget(self.btn_auto_details)
         ctrl.addWidget(self.gb_auto)
 
+        self.gb_filter = QtWidgets.QGroupBox("RF-фильтр объектов")
+        self.gb_filter.setFont(QtGui.QFont("Times New Roman", 12))
+        filter_layout = QtWidgets.QFormLayout(self.gb_filter)
+        self.check_filter_model_threshold = QtWidgets.QCheckBox("Порог из модели")
+        self.check_filter_model_threshold.setChecked(True)
+        self.check_filter_model_threshold.toggled.connect(self.settings_changed)
+        filter_layout.addRow(self.check_filter_model_threshold)
+        self.spin_filter_threshold = QtWidgets.QDoubleSpinBox()
+        self.spin_filter_threshold.setRange(0, 1)
+        self.spin_filter_threshold.setDecimals(3)
+        self.spin_filter_threshold.setSingleStep(0.01)
+        self.spin_filter_threshold.setValue(0.1)
+        self.spin_filter_threshold.valueChanged.connect(self.settings_changed)
+        filter_layout.addRow("Ручной порог:", self.spin_filter_threshold)
+        ctrl.addWidget(self.gb_filter)
+
+        self.gb_instances = QtWidgets.QGroupBox("Разделение клеток IMBP")
+        self.gb_instances.setFont(QtGui.QFont("Times New Roman", 12))
+        instances_layout = QtWidgets.QFormLayout(self.gb_instances)
+        self.instance_spins = {}
+        for key, title, minimum, maximum in (
+            ("h", "Высота маркеров h:", 0.01, 100),
+            ("sigma", "Сглаживание σ:", 0, 20),
+            ("beta", "Вес тёмности β:", 0, 5),
+            ("neck_ratio", "Порог склейки:", 0, 10),
+        ):
+            spin = QtWidgets.QDoubleSpinBox()
+            spin.setRange(minimum, maximum)
+            spin.setDecimals(2)
+            spin.setSingleStep(0.1)
+            spin.setValue(getattr(defaults.instance_params, key))
+            spin.valueChanged.connect(self.settings_changed)
+            self.instance_spins[key] = spin
+            instances_layout.addRow(title, spin)
+        note = QtWidgets.QLabel("Порог склейки 0 отключает объединение соседних частей.")
+        note.setWordWrap(True)
+        instances_layout.addRow(note)
+        ctrl.addWidget(self.gb_instances)
+
         self.progress = QtWidgets.QProgressBar()
         self.progress.setRange(0, 0)
         self.progress.setVisible(False)
@@ -249,6 +289,10 @@ class MainWindow(QtWidgets.QMainWindow):
                 bilateral=self.check_gmm_bilateral.isChecked(),
                 hmrf_beta=self.spin_gmm_beta.value(),
             ),
+            object_filter=ObjectFilterSettings(
+                threshold=None if self.check_filter_model_threshold.isChecked() else self.spin_filter_threshold.value(),
+            ),
+            instance_params=InstanceSettings(**{key: spin.value() for key, spin in self.instance_spins.items()}),
         )
 
     def segmentation_changed(self):
@@ -288,6 +332,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.gb_slic.setVisible(method == "imbp_slic")
         self.gb_gmm.setVisible(method == "imbp_gmm")
         self.gb_auto.setVisible(method == "imbp_auto")
+        rf_enabled = self.stage_combos["filtering"].currentData() == "imbp_rf"
+        split_enabled = self.stage_combos["instances"].currentData() == "imbp_watershed"
+        self.gb_filter.setVisible(rf_enabled)
+        self.gb_instances.setVisible(split_enabled)
+        self.check_filter_model_threshold.setEnabled(not busy)
+        self.spin_filter_threshold.setEnabled(not busy and not self.check_filter_model_threshold.isChecked())
+        for spin in self.instance_spins.values():
+            spin.setEnabled(not busy)
         for control in (self.spin_gmm_components, self.spin_gmm_min_area, self.check_gmm_bilateral, self.spin_gmm_beta):
             control.setEnabled(not busy)
         self.btn_auto_details.setEnabled(
@@ -312,6 +364,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.overlay_image = None
         self.mask_image = None
         label = "Объекты" if self.stage_combos["segmentation"].currentData() == "light_ridges" else "Компоненты маски"
+        if self.stage_combos["instances"].currentData() == "imbp_watershed":
+            label = "Клетки"
         self.lbl_count.setText(f"{label}: 0")
         self.lbl_details.clear()
         self.lbl_time.setText("Время: —")

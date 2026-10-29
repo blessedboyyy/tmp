@@ -3,9 +3,11 @@ from time import perf_counter
 
 import cv2
 import numpy as np
+from skimage.segmentation import find_boundaries
 
 from .light_adapter import LightAdapter
 from .imbp_adapter import ImbpAdapter
+from .imbp_postprocessing import filter_objects, split_objects
 from .models import PipelineSettings, ProcessingResult
 
 
@@ -50,17 +52,23 @@ def run_pipeline(
     processed_image_bgr = adapter.prepare(image_bgr, settings.preprocessing)
     checkpoint("Сегментация…")
     segmentation = adapter.segment(settings)
+    if settings.filtering == "imbp_rf":
+        checkpoint("Фильтрация ложных объектов (RF)…")
+        segmentation = filter_objects(processed_image_bgr, segmentation, settings.object_filter)
+    if settings.instances == "imbp_watershed":
+        checkpoint("Разделение клеток (IMBP)…")
+        segmentation = split_objects(processed_image_bgr, segmentation, settings.instance_params)
     checkpoint("Отрисовка результата…")
-    contours = [obj.contour for obj in segmentation.objects]
-    if segmentation.mask is not None:
-        contours, _ = cv2.findContours(
-            segmentation.mask.astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE
-        )
-    overlay = cv2.drawContours(
-        image_bgr.copy(),
-        contours,
-        -1, (0, 255, 0), 1,
-    )
+    overlay = image_bgr.copy()
+    if settings.instances == "imbp_watershed":
+        overlay[find_boundaries(segmentation.labels, connectivity=1, mode="inner")] = (0, 255, 0)
+    else:
+        contours = [obj.contour for obj in segmentation.objects]
+        if segmentation.mask is not None:
+            contours, _ = cv2.findContours(
+                segmentation.mask.astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE
+            )
+        cv2.drawContours(overlay, contours, -1, (0, 255, 0), 1)
     checkpoint()
     return ProcessingResult(
         settings=settings,

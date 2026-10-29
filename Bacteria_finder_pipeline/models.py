@@ -42,16 +42,18 @@ STAGES = (
         (
             MethodOption("light_area", "Площадь ≥ 25 (Light)", ("light_ridges",)),
             MethodOption("imbp_native", "Встроенная (IMBP)", ("imbp_otsu", "imbp_slic", "imbp_gmm", "imbp_auto")),
+            MethodOption("imbp_rf", "Встроенная + RF", ("imbp_otsu", "imbp_slic", "imbp_gmm", "imbp_auto")),
         ),
-        "Light: площадь контура ≥ 25. IMBP: встроенная очистка выбранного метода, без RF-фильтра объектов.",
+        "IMBP: встроенная очистка сохраняется; RF дополнительно удаляет ложные объекты после сегментации.",
     ),
     StageDefinition(
         "instances", "Разделение объектов",
         (
             MethodOption("light_watershed", "Водораздел Light", ("light_ridges",)),
             MethodOption("connected_components", "Связные области маски", ("imbp_otsu", "imbp_slic", "imbp_gmm", "imbp_auto")),
+            MethodOption("imbp_watershed", "Водораздел (IMBP)", ("imbp_otsu", "imbp_slic", "imbp_gmm", "imbp_auto")),
         ),
-        "В IMBP пока считаются связные области маски. Соприкасающиеся клетки не разделяются.",
+        "Связные области сохраняют слипшиеся клетки; водораздел IMBP выделяет отдельные клетки после фильтрации.",
     ),
     StageDefinition(
         "morphology", "Морфология",
@@ -122,6 +124,29 @@ class GmmSettings:
 
 
 @dataclass(frozen=True)
+class ObjectFilterSettings:
+    threshold: float | None = None
+
+    def __post_init__(self):
+        if self.threshold is not None:
+            validate_number(self.threshold, 0, 1, "Порог RF")
+
+
+@dataclass(frozen=True)
+class InstanceSettings:
+    h: float = 1.5
+    sigma: float = 0.5
+    beta: float = 0.2
+    neck_ratio: float = 1.0
+
+    def __post_init__(self):
+        validate_number(self.h, 0.01, 100, "h водораздела")
+        validate_number(self.sigma, 0, 20, "σ водораздела")
+        validate_number(self.beta, 0, 5, "β тёмности")
+        validate_number(self.neck_ratio, 0, 10, "Порог склейки")
+
+
+@dataclass(frozen=True)
 class PipelineSettings:
     preprocessing: str | None = None
     segmentation: str = "light_ridges"
@@ -133,6 +158,8 @@ class PipelineSettings:
     otsu: OtsuSettings = field(default_factory=OtsuSettings)
     slic: SlicSettings = field(default_factory=SlicSettings)
     gmm: GmmSettings = field(default_factory=GmmSettings)
+    object_filter: ObjectFilterSettings = field(default_factory=ObjectFilterSettings)
+    instance_params: InstanceSettings = field(default_factory=InstanceSettings)
 
     def __post_init__(self):
         light = self.segmentation == "light_ridges"
@@ -153,6 +180,8 @@ class PipelineSettings:
             raise ValueError("Ожидаются настройки OtsuSettings и SlicSettings.")
         if not isinstance(self.gmm, GmmSettings):
             raise ValueError("Ожидаются настройки GmmSettings.")
+        if not isinstance(self.object_filter, ObjectFilterSettings) or not isinstance(self.instance_params, InstanceSettings):
+            raise ValueError("Ожидаются настройки ObjectFilterSettings и InstanceSettings.")
 
 
 @dataclass(frozen=True)
@@ -188,6 +217,9 @@ class SegmentationResult:
     cluster_means: np.ndarray | None = None
     bacteria_clusters: tuple[int, ...] = ()
     tile_methods: tuple[TileMethod, ...] = ()
+    filter_probabilities: np.ndarray | None = None
+    filter_threshold: float | None = None
+    n_rejected: int = 0
 
 
 @dataclass(frozen=True)
