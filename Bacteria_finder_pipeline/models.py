@@ -33,21 +33,23 @@ STAGES = (
             MethodOption("light_ridges", "HSV + гребни (Light)"),
             MethodOption("imbp_otsu", "Оцу (IMBP)"),
             MethodOption("imbp_slic", "SLIC (IMBP)"),
+            MethodOption("imbp_gmm", "GMM (IMBP)"),
+            MethodOption("imbp_auto", "Авто (IMBP)"),
         ),
     ),
     StageDefinition(
         "filtering", "Фильтрация",
         (
             MethodOption("light_area", "Площадь ≥ 25 (Light)", ("light_ridges",)),
-            MethodOption("imbp_native", "Встроенная (IMBP)", ("imbp_otsu", "imbp_slic")),
+            MethodOption("imbp_native", "Встроенная (IMBP)", ("imbp_otsu", "imbp_slic", "imbp_gmm", "imbp_auto")),
         ),
-        "Light: площадь контура ≥ 25. IMBP: встроенная очистка маски Оцу, без RF-фильтра.",
+        "Light: площадь контура ≥ 25. IMBP: встроенная очистка выбранного метода, без RF-фильтра объектов.",
     ),
     StageDefinition(
         "instances", "Разделение объектов",
         (
             MethodOption("light_watershed", "Водораздел Light", ("light_ridges",)),
-            MethodOption("connected_components", "Связные области маски", ("imbp_otsu", "imbp_slic")),
+            MethodOption("connected_components", "Связные области маски", ("imbp_otsu", "imbp_slic", "imbp_gmm", "imbp_auto")),
         ),
         "В IMBP пока считаются связные области маски. Соприкасающиеся клетки не разделяются.",
     ),
@@ -103,6 +105,23 @@ class SlicSettings:
 
 
 @dataclass(frozen=True)
+class GmmSettings:
+    n_components: int = 3
+    min_area: int = 50
+    bilateral: bool = True
+    hmrf_beta: float = 0.0
+
+    def __post_init__(self):
+        if isinstance(self.n_components, bool) or not isinstance(self.n_components, int) or not 2 <= self.n_components <= 8:
+            raise ValueError("Число кластеров GMM должно быть целым числом от 2 до 8.")
+        if isinstance(self.min_area, bool) or not isinstance(self.min_area, int) or not 0 <= self.min_area <= 100000:
+            raise ValueError("Минимальная площадь GMM должна быть целым числом от 0 до 100000.")
+        if not isinstance(self.bilateral, bool):
+            raise ValueError("Параметр bilateral должен быть логическим значением.")
+        validate_number(self.hmrf_beta, 0, 50, "β HMRF")
+
+
+@dataclass(frozen=True)
 class PipelineSettings:
     preprocessing: str | None = None
     segmentation: str = "light_ridges"
@@ -113,6 +132,7 @@ class PipelineSettings:
     sigma: float = 2.5
     otsu: OtsuSettings = field(default_factory=OtsuSettings)
     slic: SlicSettings = field(default_factory=SlicSettings)
+    gmm: GmmSettings = field(default_factory=GmmSettings)
 
     def __post_init__(self):
         light = self.segmentation == "light_ridges"
@@ -131,6 +151,8 @@ class PipelineSettings:
         validate_number(self.sigma, 0.1, 20.0, "σ")
         if not isinstance(self.otsu, OtsuSettings) or not isinstance(self.slic, SlicSettings):
             raise ValueError("Ожидаются настройки OtsuSettings и SlicSettings.")
+        if not isinstance(self.gmm, GmmSettings):
+            raise ValueError("Ожидаются настройки GmmSettings.")
 
 
 @dataclass(frozen=True)
@@ -148,6 +170,12 @@ class TileParameters:
 
 
 @dataclass(frozen=True)
+class TileMethod:
+    bbox: tuple[int, int, int, int]
+    method: str
+
+
+@dataclass(frozen=True)
 class SegmentationResult:
     objects: tuple[DetectedObject, ...]
     mask: np.ndarray | None = None
@@ -156,6 +184,10 @@ class SegmentationResult:
     tiles: tuple[TileParameters, ...] = ()
     count_label: str = "Объекты"
     details: str = ""
+    clusters: np.ndarray | None = None
+    cluster_means: np.ndarray | None = None
+    bacteria_clusters: tuple[int, ...] = ()
+    tile_methods: tuple[TileMethod, ...] = ()
 
 
 @dataclass(frozen=True)

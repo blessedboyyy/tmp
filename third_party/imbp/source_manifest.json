@@ -3,6 +3,10 @@
   "source_archive_sha256": "8cf09230b2d2b8558690b7bfa35aff6e654bd8eb43dff83765858295884a3234",
   "files": [
     {
+      "path": "models/method_chooser_rf.joblib",
+      "sha256": "97662c6635453d518ac974f09022647f03ac38e80a07bdfd6ec4d6cbc617e9d4"
+    },
+    {
       "path": "models/slic_params_rf.joblib",
       "sha256": "45da6cc116763ab1b52d5067d18db9177684d650ac25dd2584ae74d130e7f1a4"
     },

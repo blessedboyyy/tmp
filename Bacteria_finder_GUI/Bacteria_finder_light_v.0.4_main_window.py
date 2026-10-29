@@ -10,7 +10,7 @@ import numpy as np
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from Bacteria_finder_pipeline import (
-    STAGES, OtsuSettings, PipelineSettings, ProcessingResult, SlicSettings, available_methods,
+    STAGES, GmmSettings, OtsuSettings, PipelineSettings, ProcessingResult, SlicSettings, available_methods,
 )
 from Bacteria_finder_pipeline.worker import ProcessingWorker
 
@@ -152,6 +152,47 @@ class MainWindow(QtWidgets.QMainWindow):
         slic_layout.addRow(tile_note)
         ctrl.addWidget(self.gb_slic)
 
+        self.gb_gmm = QtWidgets.QGroupBox("Параметры GMM")
+        self.gb_gmm.setFont(QtGui.QFont("Times New Roman", 12))
+        gmm_layout = QtWidgets.QFormLayout(self.gb_gmm)
+        self.spin_gmm_components = QtWidgets.QSpinBox()
+        self.spin_gmm_components.setRange(2, 8)
+        self.spin_gmm_components.setValue(defaults.gmm.n_components)
+        self.spin_gmm_components.valueChanged.connect(self.settings_changed)
+        gmm_layout.addRow("Число кластеров:", self.spin_gmm_components)
+        self.spin_gmm_min_area = QtWidgets.QSpinBox()
+        self.spin_gmm_min_area.setRange(0, 100000)
+        self.spin_gmm_min_area.setValue(defaults.gmm.min_area)
+        self.spin_gmm_min_area.valueChanged.connect(self.settings_changed)
+        gmm_layout.addRow("Мин. площадь, пикс.:", self.spin_gmm_min_area)
+        self.check_gmm_bilateral = QtWidgets.QCheckBox("Сглаживание bilateral")
+        self.check_gmm_bilateral.setChecked(defaults.gmm.bilateral)
+        self.check_gmm_bilateral.toggled.connect(self.settings_changed)
+        gmm_layout.addRow(self.check_gmm_bilateral)
+        self.spin_gmm_beta = QtWidgets.QDoubleSpinBox()
+        self.spin_gmm_beta.setRange(0, 50)
+        self.spin_gmm_beta.setDecimals(2)
+        self.spin_gmm_beta.setSingleStep(0.1)
+        self.spin_gmm_beta.setValue(defaults.gmm.hmrf_beta)
+        self.spin_gmm_beta.valueChanged.connect(self.settings_changed)
+        gmm_layout.addRow("HMRF β (0 — выкл.):", self.spin_gmm_beta)
+        ctrl.addWidget(self.gb_gmm)
+
+        self.gb_auto = QtWidgets.QGroupBox("Автоматический выбор")
+        self.gb_auto.setFont(QtGui.QFont("Times New Roman", 12))
+        auto_layout = QtWidgets.QVBoxLayout(self.gb_auto)
+        auto_note = QtWidgets.QLabel(
+            "Выбор Оцу, SLIC или GMM для каждого участка ≈ 405×404 пикселей. "
+            "Используются штатные параметры IMBP и RF-подбор SLIC. "
+            "Настройки отдельных методов на «Авто» не влияют."
+        )
+        auto_note.setWordWrap(True)
+        auto_layout.addWidget(auto_note)
+        self.btn_auto_details = QtWidgets.QPushButton("Методы по участкам…")
+        self.btn_auto_details.clicked.connect(self.show_auto_details)
+        auto_layout.addWidget(self.btn_auto_details)
+        ctrl.addWidget(self.gb_auto)
+
         self.progress = QtWidgets.QProgressBar()
         self.progress.setRange(0, 0)
         self.progress.setVisible(False)
@@ -202,6 +243,12 @@ class MainWindow(QtWidgets.QMainWindow):
                 mode=self.combo_slic_mode.currentData(),
                 k=self.spin_slic_k.value(), m=self.spin_slic_m.value(),
             ),
+            gmm=GmmSettings(
+                n_components=self.spin_gmm_components.value(),
+                min_area=self.spin_gmm_min_area.value(),
+                bilateral=self.check_gmm_bilateral.isChecked(),
+                hmrf_beta=self.spin_gmm_beta.value(),
+            ),
         )
 
     def segmentation_changed(self):
@@ -239,6 +286,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.gb_light.setVisible(method == "light_ridges")
         self.gb_otsu.setVisible(method == "imbp_otsu")
         self.gb_slic.setVisible(method == "imbp_slic")
+        self.gb_gmm.setVisible(method == "imbp_gmm")
+        self.gb_auto.setVisible(method == "imbp_auto")
+        for control in (self.spin_gmm_components, self.spin_gmm_min_area, self.check_gmm_bilateral, self.spin_gmm_beta):
+            control.setEnabled(not busy)
+        self.btn_auto_details.setEnabled(
+            not busy and method == "imbp_auto" and self.result is not None
+            and bool(self.result.segmentation.tile_methods)
+        )
         self.combo_otsu_channel.setEnabled(not busy)
         self.check_otsu_auto.setEnabled(not busy)
         self.spin_otsu_threshold.setEnabled(not busy and not self.check_otsu_auto.isChecked())
@@ -278,6 +333,38 @@ class MainWindow(QtWidgets.QMainWindow):
         if details:
             dialog.setDetailedText(details)
         dialog.exec_()
+
+    def show_auto_details(self):
+        if self._worker is not None or self._close_requested or self.result is None:
+            return
+        methods = self.result.segmentation.tile_methods
+        if not methods:
+            return
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle("Авто — методы по участкам")
+        dialog.resize(620, 420)
+        layout = QtWidgets.QVBoxLayout(dialog)
+        note = QtWidgets.QLabel("Координаты пикселей от 1; обе границы включены.")
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        table = QtWidgets.QTableWidget(len(methods), 4)
+        table.setHorizontalHeaderLabels(("Участок", "X", "Y", "Метод"))
+        table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        table.verticalHeader().setVisible(False)
+        names = {"otsu": "Оцу", "slic": "SLIC", "gmm": "GMM"}
+        for row, tile in enumerate(methods):
+            y0, y1, x0, x1 = tile.bbox
+            values = (str(row + 1), f"{x0 + 1}–{x1}", f"{y0 + 1}–{y1}", names[tile.method])
+            for column, value in enumerate(values):
+                table.setItem(row, column, QtWidgets.QTableWidgetItem(value))
+        table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
+        layout.addWidget(table)
+        buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Close)
+        buttons.button(QtWidgets.QDialogButtonBox.Close).setText("Закрыть")
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        dialog.exec_()
+        dialog.deleteLater()
 
     def load_image(self):
         if self._worker is not None or self._close_requested:

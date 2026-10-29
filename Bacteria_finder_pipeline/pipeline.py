@@ -9,7 +9,13 @@ from .imbp_adapter import ImbpAdapter
 from .models import PipelineSettings, ProcessingResult
 
 
-ADAPTERS = {"light_ridges": LightAdapter, "imbp_otsu": ImbpAdapter, "imbp_slic": ImbpAdapter}
+ADAPTERS = {
+    "light_ridges": LightAdapter,
+    "imbp_otsu": ImbpAdapter,
+    "imbp_slic": ImbpAdapter,
+    "imbp_gmm": ImbpAdapter,
+    "imbp_auto": ImbpAdapter,
+}
 
 
 class ProcessingCancelled(Exception):

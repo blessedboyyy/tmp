@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 
 from .light_adapter import LightAdapter
-from .models import DetectedObject, PipelineSettings, SegmentationResult, TileParameters
+from .models import DetectedObject, PipelineSettings, SegmentationResult, TileMethod, TileParameters
 
 
 def load_imbp():
@@ -65,7 +65,62 @@ def load_slic_predictor():
     return _load_predictor(str(path), stat.st_mtime_ns, stat.st_size)
 
 
-def mask_result(mask, *, superpixels=None, tiles=(), details=""):
+@lru_cache(maxsize=2)
+def _load_chooser(path: str, modified_ns: int, size: int):
+    imbp = load_imbp()
+    from third_party.imbp.src.imbp.segmentation import fusion
+    import sklearn
+    from sklearn.exceptions import InconsistentVersionWarning
+
+    if sklearn.__version__ != "1.9.1":
+        raise RuntimeError(
+            "Для комплектной модели выбора метода требуется scikit-learn==1.9.1. "
+            "Установите зависимости из requirements.txt."
+        )
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", InconsistentVersionWarning)
+            chooser = fusion.MethodChooser.load(path)
+        expected = list(imbp.config.FEATURE_NAMES)
+        for method in fusion.CHOOSER_METHODS:
+            expected.extend((f"{method}_frac", f"{method}_ncomp"))
+        expected.extend(("iou_otsu_slic", "iou_otsu_gmm", "iou_slic_gmm"))
+        if chooser.model is None or chooser.meta.get("sklearn_version") != "1.9.1":
+            raise ValueError("Отсутствует обученная модель либо не совпадает версия обучения.")
+        if chooser.feature_names != expected or chooser.meta.get("features") != expected:
+            raise ValueError("Не совпадают имена или порядок входных признаков выбора метода.")
+        if chooser.meta.get("methods") != list(fusion.CHOOSER_METHODS):
+            raise ValueError("Не совпадает порядок методов выбора.")
+        if getattr(chooser.model, "n_features_in_", None) != len(expected):
+            raise ValueError("Не совпадает количество входных признаков выбора метода.")
+        if getattr(chooser.model, "n_outputs_", None) != len(fusion.CHOOSER_METHODS):
+            raise ValueError("Не совпадает количество выходов модели выбора метода.")
+        return chooser
+    except Exception as exc:
+        raise RuntimeError(
+            f"Не удалось загрузить модель выбора метода: {path}. "
+            "Восстановите комплектный файл method_chooser_rf.joblib "
+            "или выберите отдельный метод сегментации."
+        ) from exc
+
+
+def load_method_chooser():
+    imbp = load_imbp()
+    path = Path(imbp.config.METHOD_CHOOSER_PATH).resolve()
+    try:
+        stat = path.stat()
+    except OSError as exc:
+        raise RuntimeError(
+            f"Модель выбора метода недоступна: {path}. "
+            "Восстановите method_chooser_rf.joblib или выберите отдельный метод сегментации."
+        ) from exc
+    return _load_chooser(str(path), stat.st_mtime_ns, stat.st_size)
+
+
+def mask_result(
+    mask, *, superpixels=None, tiles=(), details="", clusters=None,
+    cluster_means=None, bacteria_clusters=(), tile_methods=(),
+):
     mask = np.ascontiguousarray(mask, dtype=bool).copy()
     count, labels, stats, _ = cv2.connectedComponentsWithStats(
         mask.astype(np.uint8), connectivity=8, ltype=cv2.CV_32S
@@ -82,6 +137,9 @@ def mask_result(mask, *, superpixels=None, tiles=(), details=""):
         objects=tuple(objects), mask=mask, labels=labels,
         superpixels=None if superpixels is None else superpixels.copy(),
         tiles=tiles, count_label="Компоненты маски", details=details,
+        clusters=None if clusters is None else clusters.copy(),
+        cluster_means=None if cluster_means is None else cluster_means.copy(),
+        bacteria_clusters=bacteria_clusters, tile_methods=tile_methods,
     )
 
 
@@ -105,6 +163,35 @@ class ImbpAdapter:
             return mask_result(
                 native.mask,
                 details=f"Оцу: порог {native.threshold:g} ({mode}); разница классов {native.class_gap:.2f}.",
+            )
+        if settings.segmentation == "imbp_gmm":
+            params = settings.gmm
+            native = imbp.segment_gmm(
+                self._image, n_components=params.n_components, min_area=params.min_area,
+                bilateral=params.bilateral, hmrf_beta=params.hmrf_beta,
+            )
+            bilateral = "вкл." if params.bilateral else "выкл."
+            return mask_result(
+                native.mask, clusters=native.clusters, cluster_means=native.cluster_means,
+                bacteria_clusters=native.bacteria_clusters,
+                details=f"{native.describe()}. Мин. площадь: {params.min_area}; "
+                        f"bilateral: {bilateral}; β HMRF: {params.hmrf_beta:g}.",
+            )
+        if settings.segmentation == "imbp_auto":
+            from third_party.imbp.src.imbp.segmentation.fusion import segment_auto
+
+            native = segment_auto(
+                self._image, predictor=load_slic_predictor(), chooser=load_method_chooser()
+            )
+            methods = tuple(TileMethod(bbox, method) for bbox, method in native.tile_methods)
+            names = {"otsu": "Оцу", "slic": "SLIC", "gmm": "GMM"}
+            counts = "; ".join(
+                f"{name}: {sum(tile.method == method for tile in methods)}"
+                for method, name in names.items()
+            )
+            return mask_result(
+                native.mask, tile_methods=methods,
+                details=f"Авто: участков {len(methods)}. {counts}.",
             )
         mode = settings.slic.mode
         native = imbp.segment_slic(
