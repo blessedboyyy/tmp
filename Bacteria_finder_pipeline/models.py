@@ -57,11 +57,17 @@ STAGES = (
     ),
     StageDefinition(
         "morphology", "Морфология",
-        (MethodOption("none", "Не выполнять"),),
+        (MethodOption("none", "Не выполнять"), MethodOption("imbp_ellipse", "Эллипсы (IMBP)")),
+        "Кокки и палочки по эллипсу объекта; артефакты учитываются отдельно.",
     ),
     StageDefinition(
         "gram_classification", "Классификация по Граму",
-        (MethodOption("none", "Не выполнять"),),
+        (
+            MethodOption("none", "Не выполнять"),
+            MethodOption("imbp_od", "OD (IMBP)"),
+            MethodOption("imbp_rgb", "RGB (IMBP)"),
+        ),
+        "Окраска по оптической плотности или правилу R > B + Δ; артефакты исключены из процентов.",
     ),
 )
 
@@ -147,6 +153,19 @@ class InstanceSettings:
 
 
 @dataclass(frozen=True)
+class ClassificationSettings:
+    noise_min_area: int = 15
+    ecc_threshold: float = 0.7
+    red_delta: float = 15.0
+
+    def __post_init__(self):
+        if isinstance(self.noise_min_area, bool) or not isinstance(self.noise_min_area, int) or not 0 <= self.noise_min_area <= 100000:
+            raise ValueError("Минимальная площадь классификации должна быть целым числом от 0 до 100000.")
+        validate_number(self.ecc_threshold, 0, 1, "Порог эксцентриситета")
+        validate_number(self.red_delta, 0, 255, "Δ красного канала")
+
+
+@dataclass(frozen=True)
 class PipelineSettings:
     preprocessing: str | None = None
     segmentation: str = "light_ridges"
@@ -160,6 +179,7 @@ class PipelineSettings:
     gmm: GmmSettings = field(default_factory=GmmSettings)
     object_filter: ObjectFilterSettings = field(default_factory=ObjectFilterSettings)
     instance_params: InstanceSettings = field(default_factory=InstanceSettings)
+    classification_params: ClassificationSettings = field(default_factory=ClassificationSettings)
 
     def __post_init__(self):
         light = self.segmentation == "light_ridges"
@@ -182,6 +202,8 @@ class PipelineSettings:
             raise ValueError("Ожидаются настройки GmmSettings.")
         if not isinstance(self.object_filter, ObjectFilterSettings) or not isinstance(self.instance_params, InstanceSettings):
             raise ValueError("Ожидаются настройки ObjectFilterSettings и InstanceSettings.")
+        if not isinstance(self.classification_params, ClassificationSettings):
+            raise ValueError("Ожидаются настройки ClassificationSettings.")
 
 
 @dataclass(frozen=True)
@@ -223,6 +245,50 @@ class SegmentationResult:
 
 
 @dataclass(frozen=True)
+class ClassifiedObject:
+    object_id: str
+    area: int
+    centroid: tuple[float, float]
+    bbox: tuple[int, int, int, int]
+    ellipse: tuple | None
+    major_axis: float
+    minor_axis: float
+    eccentricity: float
+    mean_bgr: tuple[float, float, float]
+    artifact: bool
+    morphotype: str | None
+    gram: str | None
+    od_red_share: float | None
+
+
+@dataclass(frozen=True)
+class ClassificationResult:
+    objects: tuple[ClassifiedObject, ...]
+    morphology: str
+    gram_classification: str
+
+    @property
+    def summary(self) -> dict:
+        artifacts = sum(obj.artifact for obj in self.objects)
+        valid = len(self.objects) - artifacts
+        summary = {"objects": len(self.objects), "valid": valid, "artifacts": artifacts}
+        if self.morphology != "none":
+            summary.update(
+                cocci=sum(obj.morphotype == "coccus" for obj in self.objects),
+                bacilli=sum(obj.morphotype == "bacillus" for obj in self.objects),
+            )
+        if self.gram_classification != "none":
+            positive = sum(obj.gram == "positive" for obj in self.objects)
+            negative = sum(obj.gram == "negative" for obj in self.objects)
+            summary.update(
+                gram_positive=positive, gram_negative=negative,
+                gram_positive_pct=100.0 * positive / valid if valid else 0.0,
+                gram_negative_pct=100.0 * negative / valid if valid else 0.0,
+            )
+        return summary
+
+
+@dataclass(frozen=True)
 class ProcessingResult:
     settings: PipelineSettings
     source_shape: tuple[int, int]
@@ -230,6 +296,9 @@ class ProcessingResult:
     segmentation: SegmentationResult
     overlay_image_bgr: np.ndarray
     elapsed_seconds: float
+    classification: ClassificationResult | None = None
+    morphology_image_bgr: np.ndarray | None = None
+    gram_image_bgr: np.ndarray | None = None
 
     @property
     def object_count(self) -> int:

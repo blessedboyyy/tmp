@@ -8,6 +8,7 @@ from skimage.segmentation import find_boundaries
 from .light_adapter import LightAdapter
 from .imbp_adapter import ImbpAdapter
 from .imbp_postprocessing import filter_objects, split_objects
+from .imbp_classification import classify_segmentation, render_classification
 from .models import PipelineSettings, ProcessingResult
 
 
@@ -58,6 +59,10 @@ def run_pipeline(
     if settings.instances == "imbp_watershed":
         checkpoint("Разделение клеток (IMBP)…")
         segmentation = split_objects(processed_image_bgr, segmentation, settings.instance_params)
+    classification = None
+    if settings.morphology != "none" or settings.gram_classification != "none":
+        checkpoint("Классификация объектов (IMBP)…")
+        classification = classify_segmentation(processed_image_bgr, segmentation, settings, checkpoint)
     checkpoint("Отрисовка результата…")
     overlay = image_bgr.copy()
     if settings.instances == "imbp_watershed":
@@ -69,6 +74,7 @@ def run_pipeline(
                 segmentation.mask.astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE
             )
         cv2.drawContours(overlay, contours, -1, (0, 255, 0), 1)
+    morphology_image, gram_image = render_classification(image_bgr, segmentation, classification, overlay)
     checkpoint()
     return ProcessingResult(
         settings=settings,
@@ -77,4 +83,7 @@ def run_pipeline(
         segmentation=segmentation,
         overlay_image_bgr=overlay,
         elapsed_seconds=perf_counter() - started,
+        classification=classification,
+        morphology_image_bgr=morphology_image,
+        gram_image_bgr=gram_image,
     )

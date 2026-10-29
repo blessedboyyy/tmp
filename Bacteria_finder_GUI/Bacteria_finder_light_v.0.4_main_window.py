@@ -10,9 +10,11 @@ import numpy as np
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from Bacteria_finder_pipeline import (
+    ClassificationSettings,
     STAGES, GmmSettings, InstanceSettings, ObjectFilterSettings, OtsuSettings,
     PipelineSettings, ProcessingResult, SlicSettings, available_methods,
 )
+from Bacteria_finder_pipeline.imbp_classification import classification_text, export_classification
 from Bacteria_finder_pipeline.worker import ProcessingWorker
 
 
@@ -64,17 +66,27 @@ class MainWindow(QtWidgets.QMainWindow):
         ctrl.addWidget(self.btn_save)
 
         gb_view = QtWidgets.QGroupBox("Режим просмотра")
-        view_layout = QtWidgets.QHBoxLayout(gb_view)
+        view_layout = QtWidgets.QVBoxLayout(gb_view)
+        image_modes = QtWidgets.QHBoxLayout()
+        analysis_modes = QtWidgets.QHBoxLayout()
         self.rb_orig = QtWidgets.QRadioButton("Оригинал")
         self.rb_seg = QtWidgets.QRadioButton("Сегмент")
         self.rb_mask = QtWidgets.QRadioButton("Маска")
         self.rb_orig.setChecked(True)
-        view_layout.addWidget(self.rb_orig)
-        view_layout.addWidget(self.rb_seg)
-        view_layout.addWidget(self.rb_mask)
+        image_modes.addWidget(self.rb_orig)
+        image_modes.addWidget(self.rb_seg)
+        image_modes.addWidget(self.rb_mask)
+        self.rb_morphology = QtWidgets.QRadioButton("Морфология")
+        self.rb_gram = QtWidgets.QRadioButton("Грам")
+        analysis_modes.addWidget(self.rb_morphology)
+        analysis_modes.addWidget(self.rb_gram)
+        view_layout.addLayout(image_modes)
+        view_layout.addLayout(analysis_modes)
         self.rb_orig.toggled.connect(self.update_view)
         self.rb_seg.toggled.connect(self.update_view)
         self.rb_mask.toggled.connect(self.update_view)
+        self.rb_morphology.toggled.connect(self.update_view)
+        self.rb_gram.toggled.connect(self.update_view)
         ctrl.addWidget(gb_view)
 
         gb_stages = QtWidgets.QGroupBox("Этапы обработки")
@@ -233,6 +245,42 @@ class MainWindow(QtWidgets.QMainWindow):
         instances_layout.addRow(note)
         ctrl.addWidget(self.gb_instances)
 
+        self.gb_classification = QtWidgets.QGroupBox("Классификация IMBP")
+        self.gb_classification.setFont(QtGui.QFont("Times New Roman", 12))
+        classification_layout = QtWidgets.QFormLayout(self.gb_classification)
+        self.spin_noise_area = QtWidgets.QSpinBox()
+        self.spin_noise_area.setRange(0, 100000)
+        self.spin_noise_area.setValue(defaults.classification_params.noise_min_area)
+        self.spin_noise_area.valueChanged.connect(self.settings_changed)
+        classification_layout.addRow("Мин. площадь, пикс.:", self.spin_noise_area)
+        self.spin_eccentricity = QtWidgets.QDoubleSpinBox()
+        self.spin_eccentricity.setRange(0, 1)
+        self.spin_eccentricity.setDecimals(3)
+        self.spin_eccentricity.setSingleStep(0.01)
+        self.spin_eccentricity.setValue(defaults.classification_params.ecc_threshold)
+        self.spin_eccentricity.valueChanged.connect(self.settings_changed)
+        classification_layout.addRow("Порог e (форма):", self.spin_eccentricity)
+        self.spin_red_delta = QtWidgets.QDoubleSpinBox()
+        self.spin_red_delta.setRange(0, 255)
+        self.spin_red_delta.setDecimals(2)
+        self.spin_red_delta.setValue(defaults.classification_params.red_delta)
+        self.spin_red_delta.valueChanged.connect(self.settings_changed)
+        classification_layout.addRow("Δ R−B (RGB):", self.spin_red_delta)
+        self.lbl_gram_rule = QtWidgets.QLabel()
+        self.lbl_gram_rule.setWordWrap(True)
+        classification_layout.addRow(self.lbl_gram_rule)
+        self.lbl_classification = QtWidgets.QLabel()
+        self.lbl_classification.setWordWrap(True)
+        self.lbl_classification.setTextFormat(QtCore.Qt.PlainText)
+        classification_layout.addRow(self.lbl_classification)
+        self.btn_classification_details = QtWidgets.QPushButton("Объекты и признаки…")
+        self.btn_classification_details.clicked.connect(self.show_classification_details)
+        classification_layout.addRow(self.btn_classification_details)
+        self.btn_export_classification = QtWidgets.QPushButton("Сохранить анализ в JSON…")
+        self.btn_export_classification.clicked.connect(self.save_classification)
+        classification_layout.addRow(self.btn_export_classification)
+        ctrl.addWidget(self.gb_classification)
+
         self.progress = QtWidgets.QProgressBar()
         self.progress.setRange(0, 0)
         self.progress.setVisible(False)
@@ -293,6 +341,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 threshold=None if self.check_filter_model_threshold.isChecked() else self.spin_filter_threshold.value(),
             ),
             instance_params=InstanceSettings(**{key: spin.value() for key, spin in self.instance_spins.items()}),
+            classification_params=ClassificationSettings(
+                noise_min_area=self.spin_noise_area.value(),
+                ecc_threshold=self.spin_eccentricity.value(),
+                red_delta=self.spin_red_delta.value(),
+            ),
         )
 
     def segmentation_changed(self):
@@ -340,6 +393,25 @@ class MainWindow(QtWidgets.QMainWindow):
         self.spin_filter_threshold.setEnabled(not busy and not self.check_filter_model_threshold.isChecked())
         for spin in self.instance_spins.values():
             spin.setEnabled(not busy)
+        morph_enabled = self.stage_combos["morphology"].currentData() != "none"
+        gram_method = self.stage_combos["gram_classification"].currentData()
+        gram_enabled = gram_method != "none"
+        self.gb_classification.setVisible(morph_enabled or gram_enabled)
+        self.spin_noise_area.setEnabled(not busy)
+        self.spin_eccentricity.setEnabled(not busy and morph_enabled)
+        self.spin_red_delta.setEnabled(not busy and gram_method == "imbp_rgb")
+        self.lbl_gram_rule.setText(
+            "OD: доля красного канала > 0.12 → Грам+."
+            if gram_method == "imbp_od" else "RGB: R > B + Δ → Грам−."
+        )
+        self.lbl_gram_rule.setVisible(gram_enabled)
+        classified = self.result is not None and self.result.classification is not None
+        self.btn_classification_details.setEnabled(not busy and classified)
+        self.btn_export_classification.setEnabled(not busy and classified)
+        self.rb_morphology.setVisible(morph_enabled)
+        self.rb_gram.setVisible(gram_enabled)
+        self.rb_morphology.setEnabled(not busy and classified and self.result.morphology_image_bgr is not None)
+        self.rb_gram.setEnabled(not busy and classified and self.result.gram_image_bgr is not None)
         for control in (self.spin_gmm_components, self.spin_gmm_min_area, self.check_gmm_bilateral, self.spin_gmm_beta):
             control.setEnabled(not busy)
         self.btn_auto_details.setEnabled(
@@ -368,6 +440,7 @@ class MainWindow(QtWidgets.QMainWindow):
             label = "Клетки"
         self.lbl_count.setText(f"{label}: 0")
         self.lbl_details.clear()
+        self.lbl_classification.clear()
         self.lbl_time.setText("Время: —")
         self.rb_orig.setChecked(True)
         self.update_controls()
@@ -443,6 +516,59 @@ class MainWindow(QtWidgets.QMainWindow):
         self.clear_result()
         self.lbl_status.setText("Изображение загружено")
 
+    def show_classification_details(self):
+        if self.result is None or self.result.classification is None or self._worker is not None:
+            return
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle("Объекты и признаки IMBP")
+        dialog.resize(1050, 600)
+        layout = QtWidgets.QVBoxLayout(dialog)
+        note = QtWidgets.QLabel("Координаты от 0; площадь — в пикселях. «—» означает, что результат не выбран или неприменим.")
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        objects = self.result.classification.objects
+        table = QtWidgets.QTableWidget(len(objects), 12)
+        table.setHorizontalHeaderLabels(("ID", "Площадь", "Артефакт", "Форма", "Грам", "e", "Большая ось", "Малая ось", "Центр x, y", "BBox x, y, w, h", "Средний B, G, R", "Доля OD R"))
+        table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        table.verticalHeader().setVisible(False)
+        morph_names = {"coccus": "Кокк", "bacillus": "Палочка", "artifact": "Артефакт", None: "—"}
+        gram_names = {"positive": "+", "negative": "−", None: "—"}
+        for row, obj in enumerate(objects):
+            values = (
+                obj.object_id, str(obj.area), "Да" if obj.artifact else "Нет",
+                morph_names[obj.morphotype], gram_names[obj.gram], f"{obj.eccentricity:.4f}",
+                f"{obj.major_axis:.3f}", f"{obj.minor_axis:.3f}",
+                ", ".join(f"{x:.2f}" for x in obj.centroid), ", ".join(map(str, obj.bbox)),
+                ", ".join(f"{x:.2f}" for x in obj.mean_bgr),
+                "—" if obj.od_red_share is None else f"{obj.od_red_share:.5f}",
+            )
+            for column, value in enumerate(values):
+                table.setItem(row, column, QtWidgets.QTableWidgetItem(value))
+        table.resizeColumnsToContents()
+        layout.addWidget(table)
+        buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Close)
+        buttons.button(QtWidgets.QDialogButtonBox.Close).setText("Закрыть")
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        dialog.exec_()
+        dialog.deleteLater()
+
+    def save_classification(self):
+        if self.result is None or self.result.classification is None or self._worker is not None:
+            return
+        filename, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Сохранить анализ", "", "JSON (*.json)")
+        if not filename:
+            return
+        try:
+            suffix = Path(filename).suffix.lower()
+            if not suffix:
+                filename += ".json"
+            elif suffix != ".json":
+                raise ValueError("Выберите формат JSON.")
+            export_classification(self.result, filename)
+        except (OSError, ValueError) as exc:
+            self.show_error("Ошибка сохранения анализа", str(exc))
+
     def segment_image(self):
         if self.original_image is None or self._worker is not None or self._close_requested:
             return
@@ -480,9 +606,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.mask_image = None if mask is None else mask.astype(np.uint8) * 255
         self.lbl_count.setText(f"{result.segmentation.count_label}: {result.object_count}")
         self.lbl_details.setText(result.segmentation.details)
+        self.lbl_classification.setText(classification_text(result))
         self.lbl_time.setText(f"Время: {result.elapsed_seconds:.2f} с")
         self.lbl_status.setText("Готово")
-        self.rb_seg.setChecked(True)
+        if result.morphology_image_bgr is not None:
+            self.rb_morphology.setChecked(True)
+        elif result.gram_image_bgr is not None:
+            self.rb_gram.setChecked(True)
+        else:
+            self.rb_seg.setChecked(True)
         self.update_view()
 
     @QtCore.pyqtSlot(str, str)
@@ -533,6 +665,11 @@ class MainWindow(QtWidgets.QMainWindow):
             self.show_error("Ошибка сохранения", str(exc))
 
     def current_image(self):
+        if self.result is not None:
+            if self.rb_morphology.isChecked() and self.result.morphology_image_bgr is not None:
+                return self.result.morphology_image_bgr
+            if self.rb_gram.isChecked() and self.result.gram_image_bgr is not None:
+                return self.result.gram_image_bgr
         if self.rb_mask.isChecked() and self.mask_image is not None:
             return self.mask_image
         if self.rb_seg.isChecked() and self.overlay_image is not None:
