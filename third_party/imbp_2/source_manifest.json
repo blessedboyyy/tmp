@@ -1,0 +1,11 @@
+{
+  "source_archive": "from_Vera.zip",
+  "source_archive_sha256": "cfaa92f782dfb9d1461511eaa05d72a14d45f1da0023d507cee8d278c8a1b1c4",
+  "files": [
+    {
+      "path": "resolution/main.py",
+      "source_path": "from_Vera/microbiota_pipeline_step1_resolution/main.py",
+      "sha256": "d7b25883284b1620cceacfe116a9191c128851ffc975d99877faf09d52aa839b"
+    }
+  ]
+}

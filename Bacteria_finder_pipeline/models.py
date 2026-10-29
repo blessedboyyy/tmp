@@ -25,6 +25,7 @@ STAGES = (
         (
             MethodOption("light_average_pool", "Усреднение 2×2"),
             MethodOption("none", "Без предобработки"),
+            MethodOption("imbp_2_resolution", "Улучшение ×2 (imbp_2)"),
         ),
     ),
     StageDefinition(
@@ -303,3 +304,13 @@ class ProcessingResult:
     @property
     def object_count(self) -> int:
         return len(self.segmentation.objects)
+
+    @property
+    def processed_shape(self) -> tuple[int, int]:
+        return self.processed_image_bgr.shape[:2]
+
+    @property
+    def coordinate_scale_xy(self) -> tuple[float, float]:
+        source_h, source_w = self.source_shape
+        processed_h, processed_w = self.processed_shape
+        return processed_w / source_w, processed_h / source_h

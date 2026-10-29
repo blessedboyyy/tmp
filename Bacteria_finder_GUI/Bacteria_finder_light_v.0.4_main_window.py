@@ -76,8 +76,10 @@ class MainWindow(QtWidgets.QMainWindow):
         image_modes.addWidget(self.rb_orig)
         image_modes.addWidget(self.rb_seg)
         image_modes.addWidget(self.rb_mask)
+        self.rb_processed = QtWidgets.QRadioButton("Предобработка")
         self.rb_morphology = QtWidgets.QRadioButton("Морфология")
         self.rb_gram = QtWidgets.QRadioButton("Грам")
+        analysis_modes.addWidget(self.rb_processed)
         analysis_modes.addWidget(self.rb_morphology)
         analysis_modes.addWidget(self.rb_gram)
         view_layout.addLayout(image_modes)
@@ -85,6 +87,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.rb_orig.toggled.connect(self.update_view)
         self.rb_seg.toggled.connect(self.update_view)
         self.rb_mask.toggled.connect(self.update_view)
+        self.rb_processed.toggled.connect(self.update_view)
         self.rb_morphology.toggled.connect(self.update_view)
         self.rb_gram.toggled.connect(self.update_view)
         ctrl.addWidget(gb_view)
@@ -107,6 +110,12 @@ class MainWindow(QtWidgets.QMainWindow):
                 combo.currentIndexChanged.connect(self.settings_changed)
             self.stage_combos[stage.key] = combo
             stages_layout.addRow(f"{stage.name}:", combo)
+        self.lbl_preprocessing_note = QtWidgets.QLabel(
+            "Масштаб ×2; усиление 2. Площади и расстояния задаются "
+            "в пикселях увеличенного изображения."
+        )
+        self.lbl_preprocessing_note.setWordWrap(True)
+        stages_layout.addRow(self.lbl_preprocessing_note)
         ctrl.addWidget(gb_stages)
 
         self.gb_light = QtWidgets.QGroupBox("Параметры Light")
@@ -288,6 +297,9 @@ class MainWindow(QtWidgets.QMainWindow):
         status_layout = QtWidgets.QVBoxLayout(gb_status)
         self.lbl_count = QtWidgets.QLabel("Объекты: 0")
         self.lbl_time = QtWidgets.QLabel("Время: —")
+        self.lbl_dimensions = QtWidgets.QLabel()
+        self.lbl_dimensions.setWordWrap(True)
+        self.lbl_dimensions.setFont(QtGui.QFont("Times New Roman", 12))
         self.lbl_status = QtWidgets.QLabel("Загрузите изображение")
         self.lbl_status.setWordWrap(True)
         self.lbl_details = QtWidgets.QLabel()
@@ -296,6 +308,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.lbl_details.setTextFormat(QtCore.Qt.PlainText)
         status_layout.addWidget(self.lbl_count)
         status_layout.addWidget(self.lbl_time)
+        status_layout.addWidget(self.lbl_dimensions)
         status_layout.addWidget(self.lbl_status)
         status_layout.addWidget(self.lbl_details)
         ctrl.addStretch()
@@ -372,6 +385,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def update_controls(self):
         busy = self._worker is not None or self._close_requested
+        self.lbl_preprocessing_note.setVisible(
+            self.stage_combos["preprocessing"].currentData() == "imbp_2_resolution"
+        )
         has_image = self.original_image is not None
         self.btn_load.setEnabled(not busy)
         self.btn_segment.setEnabled(has_image and not busy)
@@ -426,9 +442,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.spin_slic_k.setEnabled(not busy and manual)
         self.spin_slic_m.setEnabled(not busy and manual)
         self.rb_seg.setEnabled(self.result is not None and not busy)
+        self.rb_processed.setEnabled(self.result is not None and not busy)
         self.rb_mask.setVisible(method != "light_ridges")
         self.rb_mask.setEnabled(self.mask_image is not None and not busy)
         self.lbl_details.setVisible(bool(self.lbl_details.text()))
+        self.lbl_dimensions.setVisible(bool(self.lbl_dimensions.text()))
         self.progress.setVisible(self._worker is not None)
 
     def clear_result(self):
@@ -442,6 +460,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.lbl_details.clear()
         self.lbl_classification.clear()
         self.lbl_time.setText("Время: —")
+        self.lbl_dimensions.setText(
+            f"Оригинал: {self.original_image.shape[1]}×{self.original_image.shape[0]} пикс."
+            if self.original_image is not None else ""
+        )
         self.rb_orig.setChecked(True)
         self.update_controls()
         self.update_view()
@@ -471,7 +493,7 @@ class MainWindow(QtWidgets.QMainWindow):
         dialog.setWindowTitle("Авто — методы по участкам")
         dialog.resize(620, 420)
         layout = QtWidgets.QVBoxLayout(dialog)
-        note = QtWidgets.QLabel("Координаты пикселей от 1; обе границы включены.")
+        note = QtWidgets.QLabel("Координаты рабочего изображения от 1; обе границы включены.")
         note.setWordWrap(True)
         layout.addWidget(note)
         table = QtWidgets.QTableWidget(len(methods), 4)
@@ -523,7 +545,11 @@ class MainWindow(QtWidgets.QMainWindow):
         dialog.setWindowTitle("Объекты и признаки IMBP")
         dialog.resize(1050, 600)
         layout = QtWidgets.QVBoxLayout(dialog)
-        note = QtWidgets.QLabel("Координаты от 0; площадь — в пикселях. «—» означает, что результат не выбран или неприменим.")
+        height, width = self.result.processed_shape
+        note = QtWidgets.QLabel(
+            f"Координаты рабочего изображения {width}×{height} от 0; площадь — в его пикселях. "
+            "«—» означает, что результат не выбран или неприменим."
+        )
         note.setWordWrap(True)
         layout.addWidget(note)
         objects = self.result.classification.objects
@@ -608,6 +634,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.lbl_details.setText(result.segmentation.details)
         self.lbl_classification.setText(classification_text(result))
         self.lbl_time.setText(f"Время: {result.elapsed_seconds:.2f} с")
+        source_h, source_w = result.source_shape
+        processed_h, processed_w = result.processed_shape
+        self.lbl_dimensions.setText(
+            f"Оригинал: {source_w}×{source_h}; рабочее: {processed_w}×{processed_h} пикс."
+        )
         self.lbl_status.setText("Готово")
         if result.morphology_image_bgr is not None:
             self.rb_morphology.setChecked(True)
@@ -666,6 +697,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def current_image(self):
         if self.result is not None:
+            if self.rb_processed.isChecked():
+                return self.result.processed_image_bgr
             if self.rb_morphology.isChecked() and self.result.morphology_image_bgr is not None:
                 return self.result.morphology_image_bgr
             if self.rb_gram.isChecked() and self.result.gram_image_bgr is not None:

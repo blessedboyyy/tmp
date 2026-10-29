@@ -49,8 +49,14 @@ def run_pipeline(
 
     started = perf_counter()
     checkpoint("Подготовка изображения…")
+    working_image_bgr = image_bgr
+    preprocessing = settings.preprocessing
+    if preprocessing == "imbp_2_resolution":
+        from .imbp_2_resolution import enhance_image
+        working_image_bgr = enhance_image(image_bgr, checkpoint)
+        preprocessing = "none"
     adapter = ADAPTERS[settings.segmentation]()
-    processed_image_bgr = adapter.prepare(image_bgr, settings.preprocessing)
+    processed_image_bgr = adapter.prepare(working_image_bgr, preprocessing)
     checkpoint("Сегментация…")
     segmentation = adapter.segment(settings)
     if settings.filtering == "imbp_rf":
@@ -64,7 +70,7 @@ def run_pipeline(
         checkpoint("Классификация объектов (IMBP)…")
         classification = classify_segmentation(processed_image_bgr, segmentation, settings, checkpoint)
     checkpoint("Отрисовка результата…")
-    overlay = image_bgr.copy()
+    overlay = working_image_bgr.copy()
     if settings.instances == "imbp_watershed":
         overlay[find_boundaries(segmentation.labels, connectivity=1, mode="inner")] = (0, 255, 0)
     else:
@@ -74,7 +80,7 @@ def run_pipeline(
                 segmentation.mask.astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE
             )
         cv2.drawContours(overlay, contours, -1, (0, 255, 0), 1)
-    morphology_image, gram_image = render_classification(image_bgr, segmentation, classification, overlay)
+    morphology_image, gram_image = render_classification(working_image_bgr, segmentation, classification, overlay)
     checkpoint()
     return ProcessingResult(
         settings=settings,

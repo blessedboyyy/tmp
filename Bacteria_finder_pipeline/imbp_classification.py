@@ -110,7 +110,20 @@ def export_classification(result, path):
         raise ValueError("Сначала выполните классификацию.")
     content = {
         "settings": asdict(result.settings),
-        "image_shape": result.source_shape,
+        "image_shape": result.processed_shape,
+        "source_image_shape": result.source_shape,
+        "coordinate_system": {
+            "reference": "processed_image",
+            "origin": "top_left",
+            "index_base": 0,
+            "scale_xy_from_source": result.coordinate_scale_xy,
+            "length_unit": "processed_pixel",
+            "area_unit": "processed_pixel_squared",
+        },
+        "preprocessing_parameters": (
+            {"scale_factor": 2, "gain": 2}
+            if result.settings.preprocessing == "imbp_2_resolution" else {}
+        ),
         "segmentation_objects": result.object_count,
         "objects_rejected_by_rf": result.segmentation.n_rejected,
         "rf_threshold": result.segmentation.filter_threshold,
