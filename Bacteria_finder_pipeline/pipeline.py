@@ -5,10 +5,11 @@ import cv2
 import numpy as np
 
 from .light_adapter import LightAdapter
+from .imbp_adapter import ImbpAdapter
 from .models import PipelineSettings, ProcessingResult
 
 
-ADAPTERS = {"light_ridges": LightAdapter}
+ADAPTERS = {"light_ridges": LightAdapter, "imbp_otsu": ImbpAdapter, "imbp_slic": ImbpAdapter}
 
 
 class ProcessingCancelled(Exception):
@@ -38,15 +39,20 @@ def run_pipeline(
             on_progress(message)
 
     started = perf_counter()
-    checkpoint("Предобработка Light…")
+    checkpoint("Подготовка изображения…")
     adapter = ADAPTERS[settings.segmentation]()
-    processed_image_bgr = adapter.prepare(image_bgr)
-    checkpoint("Сегментация Light…")
-    segmentation = adapter.segment(settings.sigma)
+    processed_image_bgr = adapter.prepare(image_bgr, settings.preprocessing)
+    checkpoint("Сегментация…")
+    segmentation = adapter.segment(settings)
     checkpoint("Отрисовка результата…")
+    contours = [obj.contour for obj in segmentation.objects]
+    if segmentation.mask is not None:
+        contours, _ = cv2.findContours(
+            segmentation.mask.astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE
+        )
     overlay = cv2.drawContours(
         image_bgr.copy(),
-        [obj.contour for obj in segmentation.objects],
+        contours,
         -1, (0, 255, 0), 1,
     )
     checkpoint()

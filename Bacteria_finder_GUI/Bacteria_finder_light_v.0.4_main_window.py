@@ -9,7 +9,9 @@ import cv2
 import numpy as np
 from PyQt5 import QtCore, QtGui, QtWidgets
 
-from Bacteria_finder_pipeline import STAGES, PipelineSettings, ProcessingResult
+from Bacteria_finder_pipeline import (
+    STAGES, OtsuSettings, PipelineSettings, ProcessingResult, SlicSettings, available_methods,
+)
 from Bacteria_finder_pipeline.worker import ProcessingWorker
 
 
@@ -18,16 +20,19 @@ class MainWindow(QtWidgets.QMainWindow):
         super().__init__()
         self.original_image = None
         self.overlay_image = None
+        self.mask_image = None
         self.result = None
         self._worker = None
         self._revision = 0
         self._active_revision = None
         self._close_requested = False
+        self._selected_segmentation = "light_ridges"
+        self._method_stage_values = {}
         self.init_ui()
 
     def init_ui(self):
         self.setObjectName("MainWindow")
-        self.setWindowTitle("Bacteria Finder — Light")
+        self.setWindowTitle("Bacteria Finder — Light + IMBP")
         self.resize(1200, 800)
         self.setMinimumSize(900, 600)
         self.setFont(QtGui.QFont("Times New Roman", 14))
@@ -58,14 +63,17 @@ class MainWindow(QtWidgets.QMainWindow):
         ctrl.addWidget(self.btn_save)
 
         gb_view = QtWidgets.QGroupBox("Режим просмотра")
-        view_layout = QtWidgets.QVBoxLayout(gb_view)
+        view_layout = QtWidgets.QHBoxLayout(gb_view)
         self.rb_orig = QtWidgets.QRadioButton("Оригинал")
         self.rb_seg = QtWidgets.QRadioButton("Сегмент")
+        self.rb_mask = QtWidgets.QRadioButton("Маска")
         self.rb_orig.setChecked(True)
         view_layout.addWidget(self.rb_orig)
         view_layout.addWidget(self.rb_seg)
+        view_layout.addWidget(self.rb_mask)
         self.rb_orig.toggled.connect(self.update_view)
         self.rb_seg.toggled.connect(self.update_view)
+        self.rb_mask.toggled.connect(self.update_view)
         ctrl.addWidget(gb_view)
 
         gb_stages = QtWidgets.QGroupBox("Этапы обработки")
@@ -76,17 +84,20 @@ class MainWindow(QtWidgets.QMainWindow):
         defaults = PipelineSettings()
         for stage in STAGES:
             combo = QtWidgets.QComboBox()
-            for method in stage.methods:
+            for method in available_methods(stage, defaults.segmentation):
                 combo.addItem(method.name, method.id)
             combo.setCurrentIndex(combo.findData(getattr(defaults, stage.key)))
             combo.setToolTip(stage.description)
-            combo.currentIndexChanged.connect(self.settings_changed)
+            if stage.key == "segmentation":
+                combo.currentIndexChanged.connect(self.segmentation_changed)
+            else:
+                combo.currentIndexChanged.connect(self.settings_changed)
             self.stage_combos[stage.key] = combo
             stages_layout.addRow(f"{stage.name}:", combo)
         ctrl.addWidget(gb_stages)
 
-        gb_params = QtWidgets.QGroupBox("Параметры Light")
-        params_layout = QtWidgets.QHBoxLayout(gb_params)
+        self.gb_light = QtWidgets.QGroupBox("Параметры Light")
+        params_layout = QtWidgets.QHBoxLayout(self.gb_light)
         params_layout.addWidget(QtWidgets.QLabel("σ сглаживания:"))
         self.spin_sigma = QtWidgets.QDoubleSpinBox()
         self.spin_sigma.setDecimals(1)
@@ -95,7 +106,51 @@ class MainWindow(QtWidgets.QMainWindow):
         self.spin_sigma.setValue(defaults.sigma)
         self.spin_sigma.valueChanged.connect(self.settings_changed)
         params_layout.addWidget(self.spin_sigma)
-        ctrl.addWidget(gb_params)
+        ctrl.addWidget(self.gb_light)
+
+        self.gb_otsu = QtWidgets.QGroupBox("Параметры Оцу")
+        self.gb_otsu.setFont(QtGui.QFont("Times New Roman", 12))
+        otsu_layout = QtWidgets.QFormLayout(self.gb_otsu)
+        self.combo_otsu_channel = QtWidgets.QComboBox()
+        for title, channel in (("Выравнивание фона", "flat_gray"), ("Яркость", "gray"), ("Плотность красителей", "od")):
+            self.combo_otsu_channel.addItem(title, channel)
+        self.combo_otsu_channel.currentIndexChanged.connect(self.settings_changed)
+        otsu_layout.addRow("Канал:", self.combo_otsu_channel)
+        self.check_otsu_auto = QtWidgets.QCheckBox("Автоматический порог")
+        self.check_otsu_auto.setChecked(True)
+        self.check_otsu_auto.toggled.connect(self.settings_changed)
+        otsu_layout.addRow(self.check_otsu_auto)
+        self.spin_otsu_threshold = QtWidgets.QDoubleSpinBox()
+        self.spin_otsu_threshold.setRange(0, 255)
+        self.spin_otsu_threshold.setDecimals(1)
+        self.spin_otsu_threshold.setValue(128)
+        self.spin_otsu_threshold.valueChanged.connect(self.settings_changed)
+        otsu_layout.addRow("Порог:", self.spin_otsu_threshold)
+        ctrl.addWidget(self.gb_otsu)
+
+        self.gb_slic = QtWidgets.QGroupBox("Параметры SLIC")
+        self.gb_slic.setFont(QtGui.QFont("Times New Roman", 12))
+        slic_layout = QtWidgets.QFormLayout(self.gb_slic)
+        self.combo_slic_mode = QtWidgets.QComboBox()
+        for title, mode in (("Random Forest", "rf"), ("Аналитический", "analytical"), ("Ручной", "manual")):
+            self.combo_slic_mode.addItem(title, mode)
+        self.combo_slic_mode.currentIndexChanged.connect(self.settings_changed)
+        slic_layout.addRow("Подбор K и M:", self.combo_slic_mode)
+        self.spin_slic_k = QtWidgets.QSpinBox()
+        self.spin_slic_k.setRange(1, 100000)
+        self.spin_slic_k.setValue(defaults.slic.k)
+        self.spin_slic_k.valueChanged.connect(self.settings_changed)
+        slic_layout.addRow("K (суперпиксели):", self.spin_slic_k)
+        self.spin_slic_m = QtWidgets.QDoubleSpinBox()
+        self.spin_slic_m.setRange(0.01, 1000)
+        self.spin_slic_m.setDecimals(2)
+        self.spin_slic_m.setValue(defaults.slic.m)
+        self.spin_slic_m.valueChanged.connect(self.settings_changed)
+        slic_layout.addRow("M (компактность):", self.spin_slic_m)
+        tile_note = QtWidgets.QLabel("Тайлы ≈ 405×404; Оцу внутри SLIC — авто.")
+        tile_note.setWordWrap(True)
+        slic_layout.addRow(tile_note)
+        ctrl.addWidget(self.gb_slic)
 
         self.progress = QtWidgets.QProgressBar()
         self.progress.setRange(0, 0)
@@ -106,9 +161,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.lbl_time = QtWidgets.QLabel("Время: —")
         self.lbl_status = QtWidgets.QLabel("Загрузите изображение")
         self.lbl_status.setWordWrap(True)
+        self.lbl_details = QtWidgets.QLabel()
+        self.lbl_details.setFont(QtGui.QFont("Times New Roman", 12))
+        self.lbl_details.setWordWrap(True)
+        self.lbl_details.setTextFormat(QtCore.Qt.PlainText)
         status_layout.addWidget(self.lbl_count)
         status_layout.addWidget(self.lbl_time)
         status_layout.addWidget(self.lbl_status)
+        status_layout.addWidget(self.lbl_details)
         ctrl.addStretch()
 
         scroll = QtWidgets.QScrollArea()
@@ -134,7 +194,37 @@ class MainWindow(QtWidgets.QMainWindow):
         return PipelineSettings(
             **{key: combo.currentData() for key, combo in self.stage_combos.items()},
             sigma=self.spin_sigma.value(),
+            otsu=OtsuSettings(
+                channel=self.combo_otsu_channel.currentData(),
+                threshold=None if self.check_otsu_auto.isChecked() else self.spin_otsu_threshold.value(),
+            ),
+            slic=SlicSettings(
+                mode=self.combo_slic_mode.currentData(),
+                k=self.spin_slic_k.value(), m=self.spin_slic_m.value(),
+            ),
         )
+
+    def segmentation_changed(self):
+        self._method_stage_values[self._selected_segmentation] = {
+            key: combo.currentData() for key, combo in self.stage_combos.items()
+            if key != "segmentation"
+        }
+        method = self.stage_combos["segmentation"].currentData()
+        defaults = PipelineSettings(segmentation=method)
+        saved = self._method_stage_values.get(method, {})
+        for stage in STAGES:
+            if stage.key == "segmentation":
+                continue
+            combo = self.stage_combos[stage.key]
+            combo.blockSignals(True)
+            combo.clear()
+            for option in available_methods(stage, method):
+                combo.addItem(option.name, option.id)
+            index = combo.findData(saved.get(stage.key, getattr(defaults, stage.key)))
+            combo.setCurrentIndex(max(0, index))
+            combo.blockSignals(False)
+        self._selected_segmentation = method
+        self.settings_changed()
 
     def update_controls(self):
         busy = self._worker is not None or self._close_requested
@@ -144,14 +234,31 @@ class MainWindow(QtWidgets.QMainWindow):
         self.btn_save.setEnabled(has_image and not busy)
         self.spin_sigma.setEnabled(not busy)
         for combo in self.stage_combos.values():
-            combo.setEnabled(not busy)
+            combo.setEnabled(not busy and combo.count() > 1)
+        method = self.stage_combos["segmentation"].currentData()
+        self.gb_light.setVisible(method == "light_ridges")
+        self.gb_otsu.setVisible(method == "imbp_otsu")
+        self.gb_slic.setVisible(method == "imbp_slic")
+        self.combo_otsu_channel.setEnabled(not busy)
+        self.check_otsu_auto.setEnabled(not busy)
+        self.spin_otsu_threshold.setEnabled(not busy and not self.check_otsu_auto.isChecked())
+        self.combo_slic_mode.setEnabled(not busy)
+        manual = self.combo_slic_mode.currentData() == "manual"
+        self.spin_slic_k.setEnabled(not busy and manual)
+        self.spin_slic_m.setEnabled(not busy and manual)
         self.rb_seg.setEnabled(self.result is not None and not busy)
+        self.rb_mask.setVisible(method != "light_ridges")
+        self.rb_mask.setEnabled(self.mask_image is not None and not busy)
+        self.lbl_details.setVisible(bool(self.lbl_details.text()))
         self.progress.setVisible(self._worker is not None)
 
     def clear_result(self):
         self.result = None
         self.overlay_image = None
-        self.lbl_count.setText("Объекты: 0")
+        self.mask_image = None
+        label = "Объекты" if self.stage_combos["segmentation"].currentData() == "light_ridges" else "Компоненты маски"
+        self.lbl_count.setText(f"{label}: 0")
+        self.lbl_details.clear()
         self.lbl_time.setText("Время: —")
         self.rb_orig.setChecked(True)
         self.update_controls()
@@ -228,7 +335,10 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         self.result = result
         self.overlay_image = result.overlay_image_bgr
-        self.lbl_count.setText(f"Объекты: {result.object_count}")
+        mask = result.segmentation.mask
+        self.mask_image = None if mask is None else mask.astype(np.uint8) * 255
+        self.lbl_count.setText(f"{result.segmentation.count_label}: {result.object_count}")
+        self.lbl_details.setText(result.segmentation.details)
         self.lbl_time.setText(f"Время: {result.elapsed_seconds:.2f} с")
         self.lbl_status.setText("Готово")
         self.rb_seg.setChecked(True)
@@ -254,10 +364,12 @@ class MainWindow(QtWidgets.QMainWindow):
     def save_image(self):
         if self.original_image is None or self._worker is not None or self._close_requested:
             return
-        image = self.overlay_image if self.rb_seg.isChecked() else self.original_image
+        image = self.current_image()
         if image is None:
             return
         filters = {"PNG (*.png)": ".png", "JPEG (*.jpg *.jpeg)": ".jpg", "BMP (*.bmp)": ".bmp"}
+        if self.rb_mask.isChecked():
+            filters.pop("JPEG (*.jpg *.jpeg)")
         filename, selected = QtWidgets.QFileDialog.getSaveFileName(
             self, "Сохранить файл", "", ";;".join(filters)
         )
@@ -270,6 +382,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 filename += suffix
             if suffix not in {".png", ".jpg", ".jpeg", ".bmp"}:
                 raise ValueError("Выберите формат PNG, JPEG или BMP.")
+            if self.rb_mask.isChecked() and suffix not in {".png", ".bmp"}:
+                raise ValueError("Сохраните бинарную маску в PNG или BMP без потерь.")
             success, buffer = cv2.imencode(suffix, image)
             if not success:
                 raise ValueError("Не удалось закодировать изображение.")
@@ -277,19 +391,24 @@ class MainWindow(QtWidgets.QMainWindow):
         except (OSError, ValueError, cv2.error) as exc:
             self.show_error("Ошибка сохранения", str(exc))
 
-    def update_view(self):
-        if self.original_image is None:
-            return
+    def current_image(self):
+        if self.rb_mask.isChecked() and self.mask_image is not None:
+            return self.mask_image
         if self.rb_seg.isChecked() and self.overlay_image is not None:
-            self.update_pixmap(self.overlay_image)
-        else:
-            self.update_pixmap(self.original_image)
+            return self.overlay_image
+        return self.original_image
+
+    def update_view(self):
+        image = self.current_image()
+        if image is not None:
+            self.update_pixmap(image)
 
     def update_pixmap(self, image):
         image = np.ascontiguousarray(image)
         height, width = image.shape[:2]
+        image_format = QtGui.QImage.Format_Grayscale8 if image.ndim == 2 else QtGui.QImage.Format_BGR888
         qimage = QtGui.QImage(
-            image.data, width, height, image.strides[0], QtGui.QImage.Format_BGR888
+            image.data, width, height, image.strides[0], image_format
         ).copy()
         pixmap = QtGui.QPixmap.fromImage(qimage)
         target = self.lbl_image.size()

@@ -1,0 +1,90 @@
+{
+  "source_archive": "imbp.zip",
+  "source_archive_sha256": "8cf09230b2d2b8558690b7bfa35aff6e654bd8eb43dff83765858295884a3234",
+  "files": [
+    {
+      "path": "models/slic_params_rf.joblib",
+      "sha256": "45da6cc116763ab1b52d5067d18db9177684d650ac25dd2584ae74d130e7f1a4"
+    },
+    {
+      "path": "src/imbp/__init__.py",
+      "sha256": "f5d38607bdc9d50f977458e47eeed369632bf3ccde5d6b83b411973842e42614"
+    },
+    {
+      "path": "src/imbp/cli.py",
+      "sha256": "98d10bdd50c2228ef3d27c28f793387985a7119f62a5a16b13e30545d9b3567a"
+    },
+    {
+      "path": "src/imbp/config.py",
+      "sha256": "c5022f18b2774110bab0de86f1f3e85e790f90e00fc6ffe62ae89bab1fa5fc8e"
+    },
+    {
+      "path": "src/imbp/dataset.py",
+      "sha256": "eaffe308c7fdaab67c8ee476d081d2ebebf87abdd1e3ebab363175d8a6a29be3"
+    },
+    {
+      "path": "src/imbp/features.py",
+      "sha256": "c41c984bbe9830462f0eb39ed0c54b23523e84acee636f5cb12cceeb3bf96d16"
+    },
+    {
+      "path": "src/imbp/gui.py",
+      "sha256": "7195ca87a5cb26cb03a0dff2b10b495558b61f9f4c3a87657fecb73b0c43add8"
+    },
+    {
+      "path": "src/imbp/instances.py",
+      "sha256": "a88fb9549d929c98d764d0fdcb03c5d376cf3c48283f3d7131faf1a1cfbe63d5"
+    },
+    {
+      "path": "src/imbp/io.py",
+      "sha256": "39f477be9a835b3b68194c61fb28ee7edfd8e39714a410aaa288a70fb9b96726"
+    },
+    {
+      "path": "src/imbp/masks.py",
+      "sha256": "5fbf4580b63864d1ca81114d7cac1a15465c312a10b6bc97e2986e70266b7963"
+    },
+    {
+      "path": "src/imbp/metrics.py",
+      "sha256": "73267a4139cc2befa7ae7a9fcb74b2ca93c220867df9e07f20a8f25c91d9011b"
+    },
+    {
+      "path": "src/imbp/morphology.py",
+      "sha256": "204021ff7ee184e307e8994e9d31aa9cfa99f375c791c1894ea1b60142c965ad"
+    },
+    {
+      "path": "src/imbp/object_filter.py",
+      "sha256": "372558f6418acd29a9b50cc01deabd5776a18f3983187352f4b879da22af90d5"
+    },
+    {
+      "path": "src/imbp/params_model.py",
+      "sha256": "74e1b5828b9bf1f2559efd926acc3acdfff96aaff996ffad64cdcbebd5a5d189"
+    },
+    {
+      "path": "src/imbp/pipeline.py",
+      "sha256": "2333bfc65f0a76922f4ca56a3e4c19c9c0bbb824b6bf1b2e85b66172e87fb9de"
+    },
+    {
+      "path": "src/imbp/segmentation/__init__.py",
+      "sha256": "0f07edaf6b5f0b368303df24eb7c04118f7fdb28926516e48993e3b3a4a1aab7"
+    },
+    {
+      "path": "src/imbp/segmentation/fusion.py",
+      "sha256": "e917f0a3998938f6aea1bb9a477adc1a1eedb47fa8998cb6afe9984e4d8b70f6"
+    },
+    {
+      "path": "src/imbp/segmentation/gmm.py",
+      "sha256": "87e4d6940aa1c1bf0d6ba85b2b2e3852d1444e7e155e9091eeb0c600f99e1640"
+    },
+    {
+      "path": "src/imbp/segmentation/slic.py",
+      "sha256": "e50e1939977ae4a20a79f92462fad13b1aeb0240755d3a3a30f698c404e504f3"
+    },
+    {
+      "path": "src/imbp/stains.py",
+      "sha256": "c47ea23c2eef9358bf243f8cb19e281589ff5e70e7fa8cc0fd8dc522e6ab1fa4"
+    },
+    {
+      "path": "src/imbp/visualization.py",
+      "sha256": "236608a95d907d941dd7336de63d84209c4864a8dca9e141bb96626ef8d00961"
+    }
+  ]
+}
